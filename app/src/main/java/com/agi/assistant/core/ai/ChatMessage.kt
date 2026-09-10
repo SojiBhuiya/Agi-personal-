@@ -1,0 +1,78 @@
+package com.agi.assistant.core.ai
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+enum class Role { SYSTEM, USER, ASSISTANT, TOOL }
+
+/** A single tool invocation requested by the model. */
+data class ToolCall(
+    val id: String,
+    val name: String,
+    val arguments: Map<String, Any?>,
+) {
+    fun argumentsJson(): JSONObject = JSONObject().apply {
+        arguments.forEach { (k, v) -> put(k, v ?: JSONObject.NULL) }
+    }
+}
+
+/**
+ * Provider independent chat message. Every AI provider translates this
+ * representation into its own wire format.
+ */
+data class ChatMessage(
+    val role: Role,
+    val content: String,
+    val toolCalls: List<ToolCall> = emptyList(),
+    /** For TOOL messages: which call this message answers. */
+    val toolCallId: String? = null,
+    /** For TOOL messages: the tool name. */
+    val toolName: String? = null,
+    val timestamp: Long = System.currentTimeMillis(),
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("role", role.name)
+        put("content", content)
+        put("timestamp", timestamp)
+        toolCallId?.let { put("toolCallId", it) }
+        toolName?.let { put("toolName", it) }
+        if (toolCalls.isNotEmpty()) {
+            put("toolCalls", JSONArray().apply {
+                toolCalls.forEach { call ->
+                    put(JSONObject().apply {
+                        put("id", call.id)
+                        put("name", call.name)
+                        put("arguments", call.argumentsJson())
+                    })
+                }
+            })
+        }
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject): ChatMessage {
+            val calls = mutableListOf<ToolCall>()
+            o.optJSONArray("toolCalls")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val c = arr.getJSONObject(i)
+                    calls += ToolCall(c.getString("id"), c.getString("name"), c.getJSONObject("arguments").toMap())
+                }
+            }
+            return ChatMessage(
+                role = Role.valueOf(o.getString("role")),
+                content = o.optString("content", ""),
+                toolCalls = calls,
+                toolCallId = o.optString("toolCallId").ifEmpty { null },
+                toolName = o.optString("toolName").ifEmpty { null },
+                timestamp = o.optLong("timestamp", System.currentTimeMillis()),
+            )
+        }
+    }
+}
+
+/** Converts a JSONObject to a plain Kotlin map (nested objects/arrays are kept as JSON). */
+fun JSONObject.toMap(): Map<String, Any?> {
+    val m = LinkedHashMap<String, Any?>()
+    keys().forEach { k -> m[k] = if (isNull(k)) null else get(k) }
+    return m
+}

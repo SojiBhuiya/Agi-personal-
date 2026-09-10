@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AGI Assistant</string>
+    <string name="accessibility_service_label">AGI Assistant screen control</string>
+    <string name="accessibility_service_description">Lets AGI Assistant perform the phone actions you ask for by voice or text: go back, go home, scroll, tap buttons, type text, read what is on the screen and take screenshots. The service only acts when you give a command. Screen content is never stored or sent anywhere except to the AI provider you configure, and only when you ask a question about the screen.</string>
+    <string name="notification_listener_label">AGI Assistant notification reader</string>
+    <string name="hint_message">Ask or command… e.g. “Open YouTube”</string>
+    <string name="send">Send</string>
+    <string name="mic">Voice input</string>
+    <string name="settings">Settings</string>
+    <string name="permissions">Permissions</string>
+    <string name="clear_chat">Clear conversation</string>
+    <string name="listening">Listening…</string>
+    <string name="welcome_title">Hi, I’m your assistant</string>
+    <string name="welcome_body">Tell me what to do on your phone in plain language. Try one of these:</string>
+</resources>

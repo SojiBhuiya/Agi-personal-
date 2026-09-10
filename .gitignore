@@ -1,0 +1,16 @@
+# Gradle / IDE
+.gradle/
+build/
+.idea/
+*.iml
+local.properties
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Offline toolchain build outputs (APK is published under dist/ intentionally)
+app/build-offline/
+toolchain/
+*.keystore
+!keys/debug.keystore.README

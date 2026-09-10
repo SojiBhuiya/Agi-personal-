@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true">
+
+    <!-- Top bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="8dp">
+
+        <View android:id="@+id/statusDot" android:layout_width="8dp" android:layout_height="8dp" android:background="@drawable/bg_status_dot"/>
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="10dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/app_name" style="@style/Text.Title" android:textSize="17sp"/>
+            <TextView android:id="@+id/statusText" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:text="Offline planner"/>
+        </LinearLayout>
+        <ImageButton android:id="@+id/btnClear" android:layout_width="44dp" android:layout_height="44dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_delete" android:contentDescription="@string/clear_chat"/>
+        <ImageButton android:id="@+id/btnPermissions" android:layout_width="44dp" android:layout_height="44dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_shield" android:contentDescription="@string/permissions"/>
+        <ImageButton android:id="@+id/btnSettings" android:layout_width="44dp" android:layout_height="44dp" android:background="?android:attr/selectableItemBackgroundBorderless" android:src="@drawable/ic_settings" android:contentDescription="@string/settings"/>
+    </LinearLayout>
+
+    <!-- Permission banner -->
+    <LinearLayout android:id="@+id/banner" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="6dp" android:padding="12dp" android:background="@drawable/bg_card" android:visibility="gone">
+        <TextView android:id="@+id/bannerText" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" style="@style/Text.Caption" android:textColor="@color/text" android:text="Enable screen control to use back, scroll, tap and type."/>
+        <Button android:id="@+id/bannerAction" android:layout_width="wrap_content" android:layout_height="36dp" style="@style/Button.Primary" android:textSize="13sp" android:text="Enable"/>
+    </LinearLayout>
+
+    <!-- Chat -->
+    <ListView
+        android:id="@+id/chatList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:clipToPadding="false"
+        android:stackFromBottom="false"
+        android:transcriptMode="normal"
+        android:listSelector="@android:color/transparent"
+        android:scrollbars="none"/>
+
+    <!-- Live transcript while listening -->
+    <TextView android:id="@+id/liveTranscript" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="24dp" android:paddingEnd="24dp" android:paddingBottom="4dp" style="@style/Text.Caption" android:textColor="@color/primary" android:visibility="gone" android:text="@string/listening"/>
+
+    <!-- Quick suggestion chips -->
+    <HorizontalScrollView android:id="@+id/chipScroll" android:layout_width="match_parent" android:layout_height="wrap_content" android:scrollbars="none" android:paddingStart="12dp" android:paddingEnd="12dp" android:clipToPadding="false">
+        <LinearLayout android:id="@+id/chipRow" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingBottom="8dp"/>
+    </HorizontalScrollView>
+
+    <!-- Composer -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp">
+
+        <EditText
+            android:id="@+id/input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="52dp"
+            android:maxLines="4"
+            android:inputType="textCapSentences|textMultiLine"
+            android:imeOptions="actionSend"
+            android:hint="@string/hint_message"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="12dp"
+            android:textColor="@color/text"
+            android:textSize="15sp"
+            android:background="@drawable/bg_input"/>
+
+        <ImageButton
+            android:id="@+id/btnSend"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_send"
+            android:src="@drawable/ic_send"
+            android:contentDescription="@string/send"
+            android:visibility="gone"/>
+
+        <ImageButton
+            android:id="@+id/btnMic"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_mic"
+            android:src="@drawable/ic_mic"
+            android:contentDescription="@string/mic"/>
+    </LinearLayout>
+</LinearLayout>

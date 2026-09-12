@@ -20,6 +20,8 @@ class UpdateManager(
     private val downloader: ApkDownloader? = null,
     /** Hop used to publish download progress to observers (the app passes the main dispatcher). */
     private val notifyDispatcher: kotlinx.coroutines.CoroutineDispatcher? = null,
+    /** Cooldown/offline rules for automatic checks (Phase 5). Null → legacy in-memory [checkIfStale]. */
+    private val autoPolicy: AutoCheckPolicy? = null,
 ) {
     fun interface Observer { fun onStateChanged(state: UpdateState) }
 
@@ -37,14 +39,36 @@ class UpdateManager(
     fun removeObserver(o: Observer) { observers -= o }
 
     /** Runs a check unless one is already in flight or a download is active/staged. */
-    fun checkNow(): Job {
+    fun checkNow(): Job = check(automatic = false)
+
+    /**
+     * Automatic check (app start / foreground). [online] comes from ConnectivityManager. Obeys
+     * [AutoCheckPolicy] cooldown/throttle and fails *silently*: an offline or failed automatic
+     * check leaves the previous state untouched, so no error appears anywhere in the UI.
+     * Returns null when no request was made.
+     */
+    fun checkAutomatically(online: Boolean): Job? {
+        val p = autoPolicy ?: return checkIfStale()
+        lastAutoDecision = p.decide(online, state)
+        if (lastAutoDecision != AutoCheckPolicy.Decision.CHECK) return null
+        p.markAttempt()
+        return check(automatic = true)
+    }
+
+    @Volatile var lastAutoDecision: AutoCheckPolicy.Decision? = null
+        private set
+
+    private fun check(automatic: Boolean): Job {
         job?.takeIf { it.isActive }?.let { return it }
         if (state is UpdateState.Downloading) return downloadJob!!
         if (state is UpdateState.InstallerLaunched) return job ?: scope.launch {} // don't disturb an install in progress
+        val previous = state
         setState(UpdateState.Checking)
         return scope.launch {
             val result = repository.checkForUpdate()
+            autoPolicy?.recordResult(result)
             var next = repository.toState(result)
+            if (automatic && result is UpdateCheckResult.Failure) next = if (previous is UpdateState.Checking) UpdateState.Idle else previous
             // Keep a finished download visible if it is still the newest release.
             val staged = stagedInfo
             if (staged != null && next is UpdateState.UpdateAvailable && next.info.releaseTag == staged.releaseTag && downloader != null) {

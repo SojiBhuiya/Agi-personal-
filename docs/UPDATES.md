@@ -133,5 +133,27 @@ different key, the installer fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`; th
 4. Never publish a debug-signed APK as a release – installs over a release build will fail.
 5. Publish the SHA-256 (`sha256: <hex>` in the notes or a `SHA256SUMS` asset) so downloads are verified.
 
-## Phase 5 (ideas)
+## Phase 5 (implemented) – automatic checking
+
+* **When**: `MainActivity.onStart` (app launch and every return to the foreground) calls
+  `AssistantApp.autoCheckForUpdates()`. Nothing runs on the main thread – the request is an IO coroutine
+  in the app scope; chat, voice, accessibility, notification listener, device tools and AI providers are
+  untouched (they share no code path with the checker).
+* **Cooldown** (`core/update/AutoCheckPolicy.kt`): at most one automatic GitHub request per **6 h**,
+  persisted in `SecureSettings.lastCheckedAt` (survives restarts); plus an in-process 60 s guard so
+  Activity recreation / rapid navigation never issues bursts; never while checking, downloading or
+  installing. Failed checks also stamp the time, so errors do not cause retries every launch.
+* **Offline**: `ConnectivityManager` says no internet → no request, no state change, no message. A
+  failing *automatic* check keeps the previous state (no error banner); a failing *manual* check shows
+  the error because the user asked.
+* **Stored locally**: last check time, last seen release tag, last prompted tag + time, postponement.
+* **No repeated dialogs**: once per process per tag (existing), and across restarts the same
+  non-mandatory release is not re-prompted automatically within 24 h of the last dialog
+  (`lastPromptedTag/At`). "Later" snoozes 24 h. Mandatory releases always prompt. The banner and
+  Settings status still show the available update.
+* **Manual** Settings › *Check for updates* always requests immediately (no cooldown) and resets the
+  prompt limits.
+* Tests: `AutoCheckTest` (30 checks).
+
+## Later ideas
 Background download via WorkManager-equivalent, delta updates, changelog history screen.

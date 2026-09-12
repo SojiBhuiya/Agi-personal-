@@ -67,6 +67,19 @@ class SecureSettings(context: Context) : UpdatePreferences {
         get() = prefs.getLong(KEY_UPDATE_POSTPONED_AT, 0L)
         set(v) = prefs.edit().putLong(KEY_UPDATE_POSTPONED_AT, v).apply()
 
+    override var lastCheckedAt: Long
+        get() = prefs.getLong(KEY_UPDATE_LAST_CHECKED, 0L)
+        set(v) = prefs.edit().putLong(KEY_UPDATE_LAST_CHECKED, v).apply()
+    override var lastSeenTag: String?
+        get() = prefs.getString(KEY_UPDATE_LAST_SEEN, null)
+        set(v) = prefs.edit().putString(KEY_UPDATE_LAST_SEEN, v).apply()
+    override var lastPromptedTag: String?
+        get() = prefs.getString(KEY_UPDATE_PROMPTED_TAG, null)
+        set(v) = prefs.edit().putString(KEY_UPDATE_PROMPTED_TAG, v).apply()
+    override var lastPromptedAt: Long
+        get() = prefs.getLong(KEY_UPDATE_PROMPTED_AT, 0L)
+        set(v) = prefs.edit().putLong(KEY_UPDATE_PROMPTED_AT, v).apply()
+
     /** "versionName|versionCode" of the release whose installer was launched; cleared once it is installed. */
     var stagedUpdate: String?
         get() = prefs.getString(KEY_UPDATE_STAGED, null)
@@ -117,6 +130,10 @@ class SecureSettings(context: Context) : UpdatePreferences {
         private const val KEY_ONBOARDED = "onboarding_done"
         private const val KEY_UPDATE_POSTPONED_TAG = "update_postponed_tag"
         private const val KEY_UPDATE_STAGED = "update_staged"
+        private const val KEY_UPDATE_LAST_CHECKED = "update_last_checked"
+        private const val KEY_UPDATE_LAST_SEEN = "update_last_seen"
+        private const val KEY_UPDATE_PROMPTED_TAG = "update_prompted_tag"
+        private const val KEY_UPDATE_PROMPTED_AT = "update_prompted_at"
         private const val KEY_UPDATE_POSTPONED_AT = "update_postponed_at"
     }
 }

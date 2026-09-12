@@ -9,7 +9,7 @@ object UpdateUiPolicyTest {
         if (cond) { passed++; println("  ok   $name") } else { fails++; println("  FAIL $name  -> $detail") }
     }
 
-    class MemPrefs : UpdatePreferences { override var postponedTag: String? = null; override var postponedAt: Long = 0 }
+    class MemPrefs : UpdatePreferences { override var postponedTag: String? = null; override var postponedAt: Long = 0; override var lastCheckedAt: Long = 0; override var lastSeenTag: String? = null; override var lastPromptedTag: String? = null; override var lastPromptedAt: Long = 0 }
 
     private fun info(tag: String, newer: Boolean = true, mandatory: Boolean = false, notes: String = "- Fixed volume controls") = UpdateInfo(
         versionName = tag.removePrefix("v"), versionCode = null, releaseTag = tag, releaseName = "AGI $tag", releaseNotes = notes,

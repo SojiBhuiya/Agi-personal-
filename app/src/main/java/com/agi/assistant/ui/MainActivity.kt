@@ -136,7 +136,9 @@ class MainActivity : Activity(), VoiceInput.Listener {
     override fun onStart() {
         super.onStart()
         app.updateManager.addObserver(updateObserver)
-        app.updateManager.checkIfStale()
+        // Automatic check on start / return to foreground: off the main thread, 6 h cooldown,
+        // silent when offline. Manual checks live in Settings › Updates.
+        app.autoCheckForUpdates()
     }
 
     override fun onStop() {

@@ -20,6 +20,7 @@ echo "== UpdateCheckerTest"; java -cp "$CP" com.agi.assistant.UpdateCheckerTest
 echo "== UpdateUiPolicyTest"; java -cp "$CP" com.agi.assistant.UpdateUiPolicyTest
 echo "== ApkDownloaderTest"; java -cp "$CP" com.agi.assistant.ApkDownloaderTest
 echo "== InstallFlowTest"; java -cp "$CP" com.agi.assistant.InstallFlowTest
+echo "== AutoCheckTest"; java -cp "$CP" com.agi.assistant.AutoCheckTest
 echo "== ProviderWireTest (mock OpenAI/Gemini server)"
 python3 "$ROOT/scripts/mock_ai_server.py" 8089 /tmp/mock_ai_last.json & MOCK=$!; trap 'kill $MOCK 2>/dev/null' EXIT; sleep 0.7
 java -cp "$CP" com.agi.assistant.ProviderWireTest http://127.0.0.1:8089 /tmp/mock_ai_last.json

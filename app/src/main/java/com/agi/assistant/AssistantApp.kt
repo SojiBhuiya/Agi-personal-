@@ -7,6 +7,7 @@ import com.agi.assistant.core.permissions.PermissionManager
 import com.agi.assistant.core.settings.SecureSettings
 import com.agi.assistant.core.tools.ToolRegistry
 import com.agi.assistant.core.update.ApkDownloader
+import com.agi.assistant.core.update.AutoCheckPolicy
 import com.agi.assistant.core.update.GitHubReleaseUpdateChecker
 import com.agi.assistant.core.update.InstalledVersion
 import com.agi.assistant.core.update.UpdateManager
@@ -51,6 +52,7 @@ class AssistantApp : Application() {
             mainScope(),
             downloader = downloader,
             notifyDispatcher = MainDispatcher,
+            autoPolicy = AutoCheckPolicy(settings),
         )
         // Drop incomplete partials and week-old packages; a recent complete file is reused (after re-verification).
         downloader.cleanupStale()
@@ -62,6 +64,19 @@ class AssistantApp : Application() {
             if (installed) { downloader.cleanupAll(); settings.stagedUpdate = null }
         }
     }
+
+    /** Best-effort connectivity signal; on any doubt we say "online" and let the request fail quietly. */
+    fun isOnline(): Boolean = runCatching {
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(true)
+
+    /**
+     * Automatic update check for app start / return to foreground. Non-blocking (IO coroutine),
+     * cooldown-limited by [AutoCheckPolicy], silent when offline or failing.
+     */
+    fun autoCheckForUpdates() { updateManager.checkAutomatically(isOnline()) }
 
     /** Installed version straight from PackageManager (never hard-coded). */
     fun installedVersion(): InstalledVersion {

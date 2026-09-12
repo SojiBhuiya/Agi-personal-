@@ -8,6 +8,13 @@ interface UpdatePreferences {
     var postponedTag: String?
     /** Epoch millis of the last postponement. */
     var postponedAt: Long
+    /** Epoch millis of the last *completed* automatic or manual check (persisted across restarts). */
+    var lastCheckedAt: Long
+    /** Release tag seen by the last successful check (null = none / no releases). */
+    var lastSeenTag: String?
+    /** Tag of the release the dialog was last shown for, and when. */
+    var lastPromptedTag: String?
+    var lastPromptedAt: Long
 }
 
 /**
@@ -21,11 +28,15 @@ interface UpdatePreferences {
  *     unless the release is mandatory (mandatory releases are shown every session,
  *     still only once per session).
  *  4. A different (newer) tag resets the postponement.
+ *  5. Across process restarts, the same non-mandatory release is not re-prompted automatically
+ *     within [repromptMs] (default 24 h) of the last time its dialog was shown. A manual
+ *     "Check for updates" bypasses this via [resetSession].
  */
 class UpdatePromptPolicy(
     private val prefs: UpdatePreferences,
     private val snoozeMs: Long = 24 * 60 * 60 * 1000L,
     private val now: () -> Long = { System.currentTimeMillis() },
+    private val repromptMs: Long = 24 * 60 * 60 * 1000L,
 ) {
     private val shownThisSession = HashSet<String>()
 
@@ -35,11 +46,19 @@ class UpdatePromptPolicy(
         if (info.isMandatory) return true
         val postponed = prefs.postponedTag
         if (postponed == info.releaseTag && now() - prefs.postponedAt < snoozeMs) return false
+        if (!userRequested && prefs.lastPromptedTag == info.releaseTag && now() - prefs.lastPromptedAt < repromptMs) return false
         return true
     }
 
     /** Call when the dialog is actually displayed. */
-    fun markShown(info: UpdateInfo) { shownThisSession += info.releaseTag }
+    fun markShown(info: UpdateInfo) {
+        shownThisSession += info.releaseTag
+        prefs.lastPromptedTag = info.releaseTag; prefs.lastPromptedAt = now()
+        userRequested = false
+    }
+
+    /** True between an explicit "Check for updates" tap and the next dialog (persisted re-prompt limit is bypassed). */
+    @Volatile private var userRequested = false
 
     /** Call when the user taps "Later". Mandatory releases cannot be postponed. */
     fun postpone(info: UpdateInfo): Boolean {
@@ -50,7 +69,7 @@ class UpdatePromptPolicy(
     }
 
     /** Used by an explicit "Check for updates" tap: the user asked, so always allow the dialog again. */
-    fun resetSession() { shownThisSession.clear() }
+    fun resetSession() { shownThisSession.clear(); userRequested = true }
 
     fun isPostponed(info: UpdateInfo): Boolean =
         !info.isMandatory && prefs.postponedTag == info.releaseTag && now() - prefs.postponedAt < snoozeMs

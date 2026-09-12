@@ -131,14 +131,19 @@ jobs:
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || fail "v2 signature missing"
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || fail "v3 signature missing"
           grep -q "Verified using v1 scheme (JAR signing): true" /tmp/verify.txt && echo "v1 present" >> "$S" || echo "v1 (JAR) absent – not required for minSdk 26" >> "$S"
-          RAW=$(grep -m1 "Signer #1 certificate SHA-256 digest:" /tmp/verify.txt | awk '{print $NF}')
-          ACTUAL=$(echo "$RAW" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          # apksigner prints one line per scheme, e.g.
+          #   "Signer #1 certificate SHA-256 digest: <hex>"  or  "V3.0 Signer: certificate SHA-256 digest: <hex>"
+          # Match any of them on the "certificate SHA-256 digest:" marker and take the 64-hex digest.
+          DIGESTS=$(grep -i "certificate SHA-256 digest:" /tmp/verify.txt | grep -oiE '[0-9a-f]{64}' | tr 'a-f' 'A-F' | sort -u)
+          RAW=$(echo "$DIGESTS" | head -1)
+          ACTUAL=$(echo "$RAW" | sed 's/../&:/g; s/:$//')
           EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr 'a-f' 'A-F')
           { echo "expected certificate: $EXPECTED"; echo "actual certificate:   $ACTUAL"; } | tee -a "$S"
           [ -n "$ACTUAL" ] || fail "could not read signer certificate from apksigner output"
           [ "$ACTUAL" = "$EXPECTED" ] || fail "Release APK is NOT signed with the persistent release key"
-          SIGNERS=$(grep -c "certificate SHA-256 digest:" /tmp/verify.txt || true)
-          [ "$SIGNERS" -eq 1 ] || fail "Expected exactly one signer, found $SIGNERS"
+          # Exactly one signer: every scheme (v2/v3) must report the same single certificate.
+          SIGNERS=$(echo "$DIGESTS" | grep -c . || true)
+          [ "$SIGNERS" -eq 1 ] || fail "Expected exactly one signer certificate, found $SIGNERS distinct"
           "$BT/zipalign" -c -p 4 "$APK" || fail "zipalign check failed"
           echo "zipalign OK" >> "$S"
           "$BT/aapt2" dump badging "$APK" > /tmp/badging.txt 2>&1 || fail "aapt2 dump badging failed"

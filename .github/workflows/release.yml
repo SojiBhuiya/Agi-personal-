@@ -125,6 +125,8 @@ jobs:
           "$BT/apksigner" verify --verbose --print-certs "$APK" > /tmp/verify.txt 2>&1; RC=$?
           cat /tmp/verify.txt | tee -a diag/verify.log
           { echo '```'; grep -E "^Verifie|certificate SHA-256|WARNING|DOES NOT" /tmp/verify.txt | head -20; echo '```'; } >> "$S"
+          # Surface the apksigner output as annotations (visible via API even when logs are not).
+          grep -E "^Verifie|certificate|WARNING|DOES NOT|ERROR|Exception" /tmp/verify.txt | head -12 | while IFS= read -r l; do echo "::notice title=apksigner::$l"; done
           [ $RC -eq 0 ] || fail "apksigner verify exited $RC"
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || fail "v2 signature missing"
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || fail "v3 signature missing"

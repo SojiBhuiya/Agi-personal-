@@ -21,6 +21,11 @@ data class UpdateInfo(
     val htmlUrl: String,
     /** True when [versionName] is strictly newer than the installed version. */
     val isNewerVersion: Boolean,
+    /**
+     * True when the release notes contain a `mandatory: true` line or a `[mandatory]` marker.
+     * Mandatory updates cannot be postponed from the update dialog.
+     */
+    val isMandatory: Boolean = false,
 ) {
     val version: SemanticVersion? get() = SemanticVersion.parse(versionName)
 }

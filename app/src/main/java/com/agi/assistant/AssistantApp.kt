@@ -9,6 +9,7 @@ import com.agi.assistant.core.tools.ToolRegistry
 import com.agi.assistant.core.update.GitHubReleaseUpdateChecker
 import com.agi.assistant.core.update.InstalledVersion
 import com.agi.assistant.core.update.UpdateManager
+import com.agi.assistant.core.update.UpdatePromptPolicy
 import com.agi.assistant.core.update.UpdateRepository
 import com.agi.assistant.util.mainScope
 import com.agi.assistant.voice.Speaker
@@ -26,6 +27,7 @@ class AssistantApp : Application() {
     lateinit var conversation: ConversationStore; private set
     lateinit var agent: AssistantAgent; private set
     lateinit var updateManager: UpdateManager; private set
+    lateinit var updatePolicy: UpdatePromptPolicy; private set
 
     override fun onCreate() {
         super.onCreate()
@@ -36,6 +38,7 @@ class AssistantApp : Application() {
         conversation = ConversationStore(this)
         agent = AssistantAgent(this, settings, tools, conversation)
         Speaker.enabled = settings.speakReplies
+        updatePolicy = UpdatePromptPolicy(settings)
         updateManager = UpdateManager(
             UpdateRepository(GitHubReleaseUpdateChecker(), ::installedVersion),
             mainScope(),

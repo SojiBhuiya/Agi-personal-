@@ -7,6 +7,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.agi.assistant.core.ai.ProviderConfig
 import com.agi.assistant.core.ai.ProviderType
+import com.agi.assistant.core.update.UpdatePreferences
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -18,7 +19,7 @@ import javax.crypto.spec.GCMParameterSpec
  * key that lives in the Android Keystore, so they never exist in plain text
  * on disk and are never compiled into the APK.
  */
-class SecureSettings(context: Context) {
+class SecureSettings(context: Context) : UpdatePreferences {
     private val prefs: SharedPreferences = context.getSharedPreferences("assistant_settings", Context.MODE_PRIVATE)
 
     // ---- Provider -----------------------------------------------------------
@@ -56,6 +57,15 @@ class SecureSettings(context: Context) {
     var onboardingDone: Boolean
         get() = prefs.getBoolean(KEY_ONBOARDED, false)
         set(v) = prefs.edit().putBoolean(KEY_ONBOARDED, v).apply()
+
+    // ---- Update prompts ---------------------------------------------------------
+    override var postponedTag: String?
+        get() = prefs.getString(KEY_UPDATE_POSTPONED_TAG, null)
+        set(v) = prefs.edit().putString(KEY_UPDATE_POSTPONED_TAG, v).apply()
+
+    override var postponedAt: Long
+        get() = prefs.getLong(KEY_UPDATE_POSTPONED_AT, 0L)
+        set(v) = prefs.edit().putLong(KEY_UPDATE_POSTPONED_AT, v).apply()
 
     fun providerConfig() = ProviderConfig(providerType, baseUrl, model, apiKey)
 
@@ -100,5 +110,7 @@ class SecureSettings(context: Context) {
         private const val KEY_TTS = "speak_replies"
         private const val KEY_CONFIRM = "confirm_sensitive"
         private const val KEY_ONBOARDED = "onboarding_done"
+        private const val KEY_UPDATE_POSTPONED_TAG = "update_postponed_tag"
+        private const val KEY_UPDATE_POSTPONED_AT = "update_postponed_at"
     }
 }

@@ -13,4 +13,9 @@
     <string name="listening">Listening…</string>
     <string name="welcome_title">Hi, I’m your assistant</string>
     <string name="welcome_body">Tell me what to do on your phone in plain language. Try one of these:</string>
+    <string name="update_title">New Update Available</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking for updates...</string>
+    <string name="update_up_to_date">You’re using the latest version.</string>
+    <string name="update_error">Unable to check for updates. Please try again later.</string>
 </resources>

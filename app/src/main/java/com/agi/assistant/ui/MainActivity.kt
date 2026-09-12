@@ -51,9 +51,14 @@ class MainActivity : Activity(), VoiceInput.Listener {
     private var voice: VoiceInput? = null
     private var pendingNeed: PermissionNeed? = null
     private var updateAvailable: UpdateState.UpdateAvailable? = null
+    private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy) }
     private val updateObserver = UpdateManager.Observer { state ->
         updateAvailable = state as? UpdateState.UpdateAvailable
         if (pendingNeed == null) refreshStatus()
+        // Non-intrusive prompt: policy allows it once per session per release, honours "Later".
+        if (state is UpdateState.UpdateAvailable && app.updatePolicy.shouldPrompt(state.info)) {
+            updateDialog.show(state.info, app.installedVersion().versionName)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -139,6 +144,7 @@ class MainActivity : Activity(), VoiceInput.Listener {
     }
 
     override fun onDestroy() {
+        updateDialog.dismiss()
         voice?.stop()
         scope.cancel()
         super.onDestroy()
@@ -156,8 +162,8 @@ class MainActivity : Activity(), VoiceInput.Listener {
         if (pendingNeed == null) {
             val upd = updateAvailable
             if (upd != null) {
-                showBanner("Update available: ${upd.info.releaseName} (${upd.info.versionName}). Open Settings › Updates.") {
-                    startActivity(Intent(this, SettingsActivity::class.java))
+                showBanner("Update available: ${upd.info.versionName} (you have ${app.installedVersion().versionName}).") {
+                    updateDialog.show(upd.info, app.installedVersion().versionName)
                 }
                 findViewById<Button>(R.id.bannerAction).text = "View"
             } else if (!app.permissions.isAccessibilityEnabled()) {

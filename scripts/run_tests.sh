@@ -17,6 +17,7 @@ CP="$OUT:$KLIB/kotlin-stdlib.jar:$KLIB/kotlinx-coroutines-core-jvm.jar:$TOOLCHAI
 echo "== LocalRuleProviderTest"; java -cp "$CP" com.agi.assistant.LocalRuleProviderTest
 echo "== AgentLoopTest"; java -cp "$CP" com.agi.assistant.AgentLoopTest
 echo "== UpdateCheckerTest"; java -cp "$CP" com.agi.assistant.UpdateCheckerTest
+echo "== UpdateUiPolicyTest"; java -cp "$CP" com.agi.assistant.UpdateUiPolicyTest
 echo "== ProviderWireTest (mock OpenAI/Gemini server)"
 python3 "$ROOT/scripts/mock_ai_server.py" 8089 /tmp/mock_ai_last.json & MOCK=$!; trap 'kill $MOCK 2>/dev/null' EXIT; sleep 0.7
 java -cp "$CP" com.agi.assistant.ProviderWireTest http://127.0.0.1:8089 /tmp/mock_ai_last.json

@@ -24,6 +24,7 @@ object GitHubReleaseParser {
         val apkName: String,
         val apkSize: Long,
         val versionCode: Long?,
+        val mandatory: Boolean,
         val prerelease: Boolean,
         val draft: Boolean,
     )
@@ -67,6 +68,7 @@ object GitHubReleaseParser {
             apkName = apk.optString("name"),
             apkSize = apk.optLong("size", -1L),
             versionCode = extractVersionCode(body),
+            mandatory = extractMandatory(body),
             prerelease = json.optBoolean("prerelease", false),
             draft = json.optBoolean("draft", false),
         )
@@ -100,6 +102,11 @@ object GitHubReleaseParser {
         if (Regex("(arm64|armeabi|x86|v7a|v8a)").containsMatchIn(name)) s -= 3
         return s
     }
+
+    /** `mandatory: true`, `mandatory=yes` or a `[mandatory]` tag anywhere in the release notes. */
+    internal fun extractMandatory(body: String): Boolean =
+        Regex("(?im)^\\s*mandatory\\s*[:=]\\s*(true|yes|1)\\s*$").containsMatchIn(body) ||
+            Regex("(?i)\\[mandatory]").containsMatchIn(body)
 
     /** Optional `versionCode: 12` / `versionCode=12` line in the release notes. */
     internal fun extractVersionCode(body: String): Long? =

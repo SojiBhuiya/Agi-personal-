@@ -7,10 +7,10 @@ import com.agi.assistant.AssistantApp
 import com.agi.assistant.R
 import com.agi.assistant.core.ai.*
 import com.agi.assistant.core.tools.ToolSpec
+import com.agi.assistant.core.update.UpdateError
 import com.agi.assistant.core.update.UpdateManager
+import com.agi.assistant.core.update.UpdateMessages
 import com.agi.assistant.core.update.UpdateState
-import android.content.Intent
-import android.net.Uri
 import android.view.View
 import com.agi.assistant.util.MainDispatcher
 import com.agi.assistant.util.mainScope
@@ -39,6 +39,9 @@ class SettingsActivity : Activity() {
     private lateinit var btnCheckUpdate: Button
     private lateinit var btnViewRelease: Button
     private val updateObserver = UpdateManager.Observer { renderUpdate(it) }
+    private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy) }
+    /** Set when the user tapped "Check for updates" so the result can open the dialog. */
+    private var manualCheck = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +91,11 @@ class SettingsActivity : Activity() {
         btnViewRelease = findViewById(R.id.btnViewRelease)
         val v = app.installedVersion()
         updateInstalled.text = "Installed: ${v.versionName} (build ${v.versionCode})"
-        btnCheckUpdate.setOnClickListener { app.updateManager.checkNow() }
+        btnCheckUpdate.setOnClickListener {
+            manualCheck = true
+            app.updatePolicy.resetSession()
+            app.updateManager.checkNow()
+        }
     }
 
     override fun onStart() {
@@ -101,27 +108,38 @@ class SettingsActivity : Activity() {
         super.onStop()
     }
 
+    override fun onDestroy() {
+        updateDialog.dismiss()
+        super.onDestroy()
+    }
+
     private fun renderUpdate(state: UpdateState) {
+        val installed = app.installedVersion().versionName
         btnCheckUpdate.isEnabled = state !is UpdateState.Checking
+        btnCheckUpdate.text = if (state is UpdateState.Checking) UpdateMessages.CHECKING else getString(R.string.update_check)
         btnViewRelease.visibility = View.GONE
         updateNotes.visibility = View.GONE
-        when (state) {
-            UpdateState.Idle -> updateStatus.text = "Updates are fetched from GitHub Releases (SojiBhuiya/Agi-personal-)."
-            UpdateState.Checking -> updateStatus.text = "Checking GitHub for the latest release…"
-            is UpdateState.UpToDate -> updateStatus.text = "You are up to date." +
-                (state.latest?.let { " Latest release: ${it.releaseTag}." } ?: "")
-            is UpdateState.UpdateAvailable -> {
-                val i = state.info
-                updateStatus.text = "Update available: ${i.releaseName} (${i.versionName})" +
-                    (if (i.apkSizeBytes > 0) " • ${i.apkSizeBytes / 1024 / 1024} MB" else "") +
-                    "\nIn-app download & install arrives in the next phase; you can open the release page for now."
-                if (i.releaseNotes.isNotBlank()) { updateNotes.text = i.releaseNotes.trim(); updateNotes.visibility = View.VISIBLE }
-                if (i.htmlUrl.startsWith("https://")) {
-                    btnViewRelease.visibility = View.VISIBLE
-                    btnViewRelease.setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(i.htmlUrl))) }
-                }
+        updateStatus.text = UpdateMessages.statusLine(state, installed)
+        if (state is UpdateState.UpdateAvailable) {
+            val i = state.info
+            val notes = UpdateMessages.whatsNew(i.releaseNotes, 6)
+            if (notes.isNotBlank()) { updateNotes.text = "What’s New:\n$notes"; updateNotes.visibility = View.VISIBLE }
+            btnViewRelease.visibility = View.VISIBLE
+            btnViewRelease.text = "Update"
+            btnViewRelease.setOnClickListener { updateDialog.show(i, installed) }
+        }
+        if (state is UpdateState.Error && state.reason != UpdateError.HTTP) {
+            // Keep the technical detail reachable for bug reports without cluttering the main line.
+            updateNotes.text = "Details: ${state.message}"; updateNotes.visibility = View.VISIBLE
+        }
+        if (manualCheck && state.isTerminal) {
+            manualCheck = false
+            when (state) {
+                is UpdateState.UpdateAvailable -> updateDialog.show(state.info, installed)
+                is UpdateState.UpToDate -> Toast.makeText(this, UpdateMessages.UP_TO_DATE, Toast.LENGTH_SHORT).show()
+                is UpdateState.Error -> Toast.makeText(this, UpdateMessages.statusLine(state, installed), Toast.LENGTH_LONG).show()
+                else -> {}
             }
-            is UpdateState.Error -> updateStatus.text = "Update check failed (${state.reason.name.lowercase().replace('_', ' ')}): ${state.message}"
         }
     }
 

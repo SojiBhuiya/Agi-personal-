@@ -39,7 +39,23 @@ gh release create v0.2.0 dist/agi-assistant-0.2.0-release.apk --title "AGI Assis
 Bump `versionName`/`versionCode` in `app/build.gradle.kts` first; optionally add `versionCode: N`
 to the notes.
 
-## Phase 2 (next) – download & install
+## Phase 2 (implemented) – update UI
+
+* **Dialog** (`ui/UpdateDialog.kt`, `layout/dialog_update.xml`): "New Update Available", current
+  version, new version, release date/size, *What's New* (Markdown bullets normalised), **UPDATE** and
+  **LATER**. UPDATE currently opens the GitHub release page; Phase 3 replaces it with in-app install.
+* **Non-intrusive policy** (`core/update/UpdatePromptPolicy.kt`): prompt only for newer releases,
+  once per session per tag (no duplicate dialogs), and never within 24 h of a "Later" tap.
+  A release is **mandatory** when its notes contain `mandatory: true` or `[mandatory]` – then LATER is
+  hidden, the dialog is not cancelable, and it is shown every session.
+* **Settings › Updates** card: installed version, *Check for updates* (shows "Checking for updates..."),
+  status via `UpdateMessages` – "You’re using the latest version." / "Unable to check for updates. Please
+  try again later." – and an **Update** button that reopens the dialog.
+* Home screen: throttled auto-check on start; banner "Update available …" with *View*.
+* Tests: `UpdateUiPolicyTest` (27 checks) covers dedupe, postponement/snooze expiry, mandatory rules,
+  marker parsing and message formatting.
+
+## Phase 3 (next) – download & install
 `UpdateState.Downloading(progress)` / `Downloaded(file)` / `Installing`; download the
 `apkDownloadUrl` with `DownloadManager` into app-private storage, verify size/SHA-256 when a
 `*.apk.sha256` asset exists, then hand the file to the system installer via

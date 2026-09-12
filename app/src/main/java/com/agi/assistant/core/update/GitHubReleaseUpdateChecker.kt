@@ -72,6 +72,7 @@ class GitHubReleaseUpdateChecker(
                 publishedAt = release.publishedAt,
                 htmlUrl = release.htmlUrl,
                 isNewerVersion = newer,
+                isMandatory = release.mandatory,
             )
         )
     }

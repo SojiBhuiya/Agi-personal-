@@ -42,6 +42,7 @@ app/src/main/java/com/agi/assistant
 │   │   ├── Tool.kt / ToolSpec.kt / ToolResult.kt / ToolRegistry.kt
 │   │   └── impl/                   AppTools, CommunicationTools, DeviceTools,
 │   │                               FileTools, NotificationTools, AccessibilityTools
+│   ├── update/                 GitHub-release update checker (see docs/UPDATES.md)
 │   ├── permissions/PermissionManager.kt
 │   └── settings/SecureSettings.kt  Android-Keystore-encrypted API key storage
 ├── services/

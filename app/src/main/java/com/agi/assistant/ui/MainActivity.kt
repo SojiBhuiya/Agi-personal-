@@ -17,6 +17,8 @@ import com.agi.assistant.core.agent.AgentEvent
 import com.agi.assistant.core.ai.ProviderType
 import com.agi.assistant.core.ai.Role
 import com.agi.assistant.core.tools.PermissionNeed
+import com.agi.assistant.core.update.UpdateManager
+import com.agi.assistant.core.update.UpdateState
 import com.agi.assistant.util.mainScope
 import com.agi.assistant.voice.Speaker
 import com.agi.assistant.voice.VoiceInput
@@ -48,6 +50,11 @@ class MainActivity : Activity(), VoiceInput.Listener {
 
     private var voice: VoiceInput? = null
     private var pendingNeed: PermissionNeed? = null
+    private var updateAvailable: UpdateState.UpdateAvailable? = null
+    private val updateObserver = UpdateManager.Observer { state ->
+        updateAvailable = state as? UpdateState.UpdateAvailable
+        if (pendingNeed == null) refreshStatus()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,6 +122,17 @@ class MainActivity : Activity(), VoiceInput.Listener {
         if (intent?.action == Intent.ACTION_ASSIST || intent?.action == Intent.ACTION_VOICE_COMMAND) toggleVoice()
     }
 
+    override fun onStart() {
+        super.onStart()
+        app.updateManager.addObserver(updateObserver)
+        app.updateManager.checkIfStale()
+    }
+
+    override fun onStop() {
+        app.updateManager.removeObserver(updateObserver)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshStatus()
@@ -136,7 +154,14 @@ class MainActivity : Activity(), VoiceInput.Listener {
             ProviderType.GEMINI -> "Gemini • ${s.model.ifBlank { "model not set" }}"
         }
         if (pendingNeed == null) {
-            if (!app.permissions.isAccessibilityEnabled()) {
+            val upd = updateAvailable
+            if (upd != null) {
+                showBanner("Update available: ${upd.info.releaseName} (${upd.info.versionName}). Open Settings › Updates.") {
+                    startActivity(Intent(this, SettingsActivity::class.java))
+                }
+                findViewById<Button>(R.id.bannerAction).text = "View"
+            } else if (!app.permissions.isAccessibilityEnabled()) {
+                findViewById<Button>(R.id.bannerAction).text = "Enable"
                 showBanner("Enable screen control (Accessibility) to use back, scroll, tap, type and screenshots.") {
                     startActivity(app.permissions.settingsIntent(com.agi.assistant.core.permissions.Capability.Special.ACCESSIBILITY))
                 }

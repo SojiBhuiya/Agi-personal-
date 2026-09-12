@@ -7,6 +7,11 @@ import com.agi.assistant.AssistantApp
 import com.agi.assistant.R
 import com.agi.assistant.core.ai.*
 import com.agi.assistant.core.tools.ToolSpec
+import com.agi.assistant.core.update.UpdateManager
+import com.agi.assistant.core.update.UpdateState
+import android.content.Intent
+import android.net.Uri
+import android.view.View
 import com.agi.assistant.util.MainDispatcher
 import com.agi.assistant.util.mainScope
 import com.agi.assistant.voice.Speaker
@@ -28,6 +33,12 @@ class SettingsActivity : Activity() {
     private lateinit var testResult: TextView
     private lateinit var swFallback: Switch
     private lateinit var swSpeak: Switch
+    private lateinit var updateInstalled: TextView
+    private lateinit var updateStatus: TextView
+    private lateinit var updateNotes: TextView
+    private lateinit var btnCheckUpdate: Button
+    private lateinit var btnViewRelease: Button
+    private val updateObserver = UpdateManager.Observer { renderUpdate(it) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +80,49 @@ class SettingsActivity : Activity() {
 
         findViewById<Button>(R.id.btnSave).setOnClickListener { save(); finish() }
         findViewById<Button>(R.id.btnTest).setOnClickListener { test() }
+
+        updateInstalled = findViewById(R.id.updateInstalled)
+        updateStatus = findViewById(R.id.updateStatus)
+        updateNotes = findViewById(R.id.updateNotes)
+        btnCheckUpdate = findViewById(R.id.btnCheckUpdate)
+        btnViewRelease = findViewById(R.id.btnViewRelease)
+        val v = app.installedVersion()
+        updateInstalled.text = "Installed: ${v.versionName} (build ${v.versionCode})"
+        btnCheckUpdate.setOnClickListener { app.updateManager.checkNow() }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        app.updateManager.addObserver(updateObserver)
+    }
+
+    override fun onStop() {
+        app.updateManager.removeObserver(updateObserver)
+        super.onStop()
+    }
+
+    private fun renderUpdate(state: UpdateState) {
+        btnCheckUpdate.isEnabled = state !is UpdateState.Checking
+        btnViewRelease.visibility = View.GONE
+        updateNotes.visibility = View.GONE
+        when (state) {
+            UpdateState.Idle -> updateStatus.text = "Updates are fetched from GitHub Releases (SojiBhuiya/Agi-personal-)."
+            UpdateState.Checking -> updateStatus.text = "Checking GitHub for the latest release…"
+            is UpdateState.UpToDate -> updateStatus.text = "You are up to date." +
+                (state.latest?.let { " Latest release: ${it.releaseTag}." } ?: "")
+            is UpdateState.UpdateAvailable -> {
+                val i = state.info
+                updateStatus.text = "Update available: ${i.releaseName} (${i.versionName})" +
+                    (if (i.apkSizeBytes > 0) " • ${i.apkSizeBytes / 1024 / 1024} MB" else "") +
+                    "\nIn-app download & install arrives in the next phase; you can open the release page for now."
+                if (i.releaseNotes.isNotBlank()) { updateNotes.text = i.releaseNotes.trim(); updateNotes.visibility = View.VISIBLE }
+                if (i.htmlUrl.startsWith("https://")) {
+                    btnViewRelease.visibility = View.VISIBLE
+                    btnViewRelease.setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(i.htmlUrl))) }
+                }
+            }
+            is UpdateState.Error -> updateStatus.text = "Update check failed (${state.reason.name.lowercase().replace('_', ' ')}): ${state.message}"
+        }
     }
 
     private fun spinnerAdapter(items: List<String>) =

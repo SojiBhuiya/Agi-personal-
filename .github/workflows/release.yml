@@ -113,14 +113,17 @@ jobs:
       - name: Verify signature, certificate fingerprint and package metadata
         shell: bash
         run: |
-          set -uo pipefail
-          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
-          S="$GITHUB_STEP_SUMMARY"
-          fail() { echo "::error::$1"; echo "❌ $1" >> "$S"; exit 1; }
+          set +e
+          S="$GITHUB_STEP_SUMMARY"; mkdir -p diag
+          fail() { echo "::error::$1"; echo "❌ $1" | tee -a "$S" >> diag/verify.log; exit 1; }
           echo "### Release verification" >> "$S"
-          echo "build-tools: $BT / apk: $APK" >> "$S"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BTV=$(ls "$SDK/build-tools" 2>/dev/null | sort -V | tail -1); BT="$SDK/build-tools/$BTV"
+          echo "sdk=$SDK build-tools=$BTV apk=${APK:-<unset>}" | tee -a "$S" diag/verify.log
+          [ -x "$BT/apksigner" ] || fail "apksigner not found under $BT"
+          [ -f "${APK:-}" ] || fail "APK path not set / file missing (env APK='${APK:-}')"
           "$BT/apksigner" verify --verbose --print-certs "$APK" > /tmp/verify.txt 2>&1; RC=$?
-          cat /tmp/verify.txt
+          cat /tmp/verify.txt | tee -a diag/verify.log
           { echo '```'; grep -E "^Verifie|certificate SHA-256|WARNING|DOES NOT" /tmp/verify.txt | head -20; echo '```'; } >> "$S"
           [ $RC -eq 0 ] || fail "apksigner verify exited $RC"
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || fail "v2 signature missing"
@@ -156,6 +159,14 @@ jobs:
             out/*.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Upload verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-diagnostics
+          path: diag/
+          if-no-files-found: ignore
 
       - name: Upload lint report
         if: always()

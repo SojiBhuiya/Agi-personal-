@@ -55,7 +55,9 @@ one. AGI Assistant 0.2.0 and every later release are signed with the persistent 
 | Alias | `agi-release` |
 | Key | RSA 4096, SHA256withRSA, valid ~30 years |
 | Subject | `CN=AGI Assistant Release, OU=Release, O=AGI Assistant, C=BD` |
-| Certificate SHA-256 | `D7:0A:77:C9:80:B2:B4:96:D8:B5:6B:74:EA:EA:68:6A:2D:A4:7A:B0:C4:25:25:F7:D6:12:A3:78:88:93:26:2F` |
+| Valid | 2026-09-12 → 2056-09-04 |
+| History | An earlier key (fingerprint `D7:0A:77:…`) was generated on 2026-09-12 but lost before any APK signed with it was published; it is void. The key above is the only valid release key. |
+| Certificate SHA-256 | `6C:E0:19:93:BC:93:EC:15:C1:35:1E:DC:29:A8:3C:84:55:92:8B:8E:5A:4E:53:DE:39:E9:39:9B:51:DF:E1:A8` |
 
 The keystore file and its password are **not in the repository** (`*.jks`, `*.keystore`,
 `.signing.env` are git-ignored) and must be backed up privately (password manager + offline copy).

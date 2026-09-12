@@ -127,7 +127,7 @@ different key, the installer fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`; th
 "signed with a different key" and the user would have to uninstall (losing data). Therefore:
 
 1. Keep **one** release keystore for the lifetime of the app; back it up securely (loss = no more updates).
-   The key in use since 0.2.0 has certificate SHA-256 `D7:0A:77:C9:…:93:26:2F` (full value in docs/BUILD.md).
+   The key in use since 0.2.0 has certificate SHA-256 `6C:E0:19:93:…:51:DF:E1:A8` (full value in docs/BUILD.md).
 2. Build every release with it (`.signing.env` or `KEYSTORE`/`KEYSTORE_PASS`/`KEY_ALIAS` env vars → `scripts/build_apk.sh release`; the script refuses the debug key).
 3. Bump `versionCode` (and `versionName`) in `app/build.gradle.kts` for every release; the checker,
    the preflight and Android itself all require it to increase.

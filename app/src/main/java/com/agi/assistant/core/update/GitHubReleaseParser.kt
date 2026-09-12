@@ -25,6 +25,8 @@ object GitHubReleaseParser {
         val apkSize: Long,
         val versionCode: Long?,
         val mandatory: Boolean,
+        val sha256: String?,
+        val checksumAssetUrl: String?,
         val prerelease: Boolean,
         val draft: Boolean,
     )
@@ -57,6 +59,8 @@ object GitHubReleaseParser {
             throw ParseException("APK asset URL is not HTTPS: $url", UpdateError.MALFORMED_RESPONSE)
 
         val body = json.optString("body").takeIf { it != "null" } ?: ""
+        val apkName = apk.optString("name")
+        val assetList = assets?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it) } } ?: emptyList()
         return Release(
             tag = tag,
             version = version,
@@ -65,10 +69,12 @@ object GitHubReleaseParser {
             publishedAt = json.optString("published_at").takeIf { it != "null" } ?: "",
             htmlUrl = json.optString("html_url").takeIf { it != "null" } ?: "",
             apkUrl = url,
-            apkName = apk.optString("name"),
+            apkName = apkName,
             apkSize = apk.optLong("size", -1L),
             versionCode = extractVersionCode(body),
             mandatory = extractMandatory(body),
+            sha256 = extractSha256(body, apkName),
+            checksumAssetUrl = selectChecksumAsset(assetList, apkName),
             prerelease = json.optBoolean("prerelease", false),
             draft = json.optBoolean("draft", false),
         )
@@ -101,6 +107,43 @@ object GitHubReleaseParser {
         if ("debug" in name) s -= 2
         if (Regex("(arm64|armeabi|x86|v7a|v8a)").containsMatchIn(name)) s -= 3
         return s
+    }
+
+    /**
+     * Inline checksum in the notes: `sha256: <64 hex>` or `<64 hex>  <apkName>` (sha256sum format).
+     * When several sums are listed, the one next to the APK name wins.
+     */
+    internal fun extractSha256(body: String, apkName: String): String? {
+        val hex = "([A-Fa-f0-9]{64})"
+        Regex("$hex\\s+\\*?\\Q$apkName\\E").find(body)?.let { return it.groupValues[1].lowercase() }
+        Regex("(?im)^\\s*sha-?256\\s*[:=]\\s*$hex\\s*$").find(body)?.let { return it.groupValues[1].lowercase() }
+        return null
+    }
+
+    /** `<apkName>.sha256`, else any `*.sha256` / `SHA256SUMS*` asset (HTTPS only). */
+    internal fun selectChecksumAsset(assets: List<JSONObject>, apkName: String): String? {
+        fun url(a: JSONObject) = a.optString("browser_download_url").takeIf { it.startsWith("https://", true) }
+        val uploaded = assets.filter { it.optString("state", "uploaded") == "uploaded" }
+        uploaded.firstOrNull { it.optString("name").equals("$apkName.sha256", true) }?.let { url(it)?.let { u -> return u } }
+        uploaded.firstOrNull { it.optString("name").lowercase().let { n -> n.startsWith("sha256sums") || n == "checksums.txt" || n == "sha256sum.txt" } }
+            ?.let { url(it)?.let { u -> return u } }
+        return null
+    }
+
+    /**
+     * Extracts the sum for [apkName] from a checksum file body: either a bare 64-hex line
+     * (`<apk>.sha256` style) or `sha256sum` lines (`<hex>  <name>`).
+     */
+    fun parseChecksumFile(text: String, apkName: String): String? {
+        val hex = Regex("^([A-Fa-f0-9]{64})(?:\\s+\\*?(.+))?$")
+        var bare: String? = null
+        text.lines().map { it.trim() }.forEach { line ->
+            val m = hex.find(line) ?: return@forEach
+            val name = m.groupValues[2].trim().substringAfterLast('/')
+            if (name.equals(apkName, true)) return m.groupValues[1].lowercase()
+            if (name.isEmpty() && bare == null) bare = m.groupValues[1].lowercase()
+        }
+        return bare
     }
 
     /** `mandatory: true`, `mandatory=yes` or a `[mandatory]` tag anywhere in the release notes. */

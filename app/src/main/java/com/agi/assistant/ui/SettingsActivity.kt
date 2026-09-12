@@ -39,7 +39,7 @@ class SettingsActivity : Activity() {
     private lateinit var btnCheckUpdate: Button
     private lateinit var btnViewRelease: Button
     private val updateObserver = UpdateManager.Observer { renderUpdate(it) }
-    private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy) }
+    private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy, app.updateManager) }
     /** Set when the user tapped "Check for updates" so the result can open the dialog. */
     private var manualCheck = false
 
@@ -115,7 +115,7 @@ class SettingsActivity : Activity() {
 
     private fun renderUpdate(state: UpdateState) {
         val installed = app.installedVersion().versionName
-        btnCheckUpdate.isEnabled = state !is UpdateState.Checking
+        btnCheckUpdate.isEnabled = state !is UpdateState.Checking && state !is UpdateState.Downloading
         btnCheckUpdate.text = if (state is UpdateState.Checking) UpdateMessages.CHECKING else getString(R.string.update_check)
         btnViewRelease.visibility = View.GONE
         updateNotes.visibility = View.GONE
@@ -127,6 +127,12 @@ class SettingsActivity : Activity() {
             btnViewRelease.visibility = View.VISIBLE
             btnViewRelease.text = "Update"
             btnViewRelease.setOnClickListener { updateDialog.show(i, installed) }
+        }
+        when (state) {
+            is UpdateState.Downloading -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "View progress"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
+            is UpdateState.ReadyToInstall -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Install"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
+            is UpdateState.DownloadFailed -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Retry"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
+            else -> {}
         }
         if (state is UpdateState.Error && state.reason != UpdateError.HTTP) {
             // Keep the technical detail reachable for bug reports without cluttering the main line.

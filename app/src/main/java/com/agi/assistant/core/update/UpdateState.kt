@@ -1,6 +1,10 @@
 package com.agi.assistant.core.update
 
-/** Observable state of the update check. Phase 1 stops at UPDATE_AVAILABLE / UP_TO_DATE. */
+/**
+ * Observable state of the update pipeline:
+ * Idle → Checking → UpdateAvailable → Downloading → ReadyToInstall (→ install, Phase 4)
+ *                                   ↘ DownloadFailed (retry → Downloading)
+ */
 sealed class UpdateState {
     /** No check has run yet in this process. */
     object Idle : UpdateState()
@@ -10,7 +14,19 @@ sealed class UpdateState {
     data class UpToDate(val installedVersion: String, val latest: UpdateInfo?) : UpdateState()
     data class Error(val reason: UpdateError, val message: String, val cause: Throwable? = null) : UpdateState()
 
-    val isTerminal: Boolean get() = this !is Idle && this !is Checking
+    /** APK download in flight. [percent] is -1 while the total size is unknown. */
+    data class Downloading(val info: UpdateInfo, val bytesDownloaded: Long, val totalBytes: Long) : UpdateState() {
+        val percent: Int get() = if (totalBytes > 0) ((bytesDownloaded * 100) / totalBytes).toInt().coerceIn(0, 100) else -1
+    }
+    /** File is complete (and checksum-verified when a checksum was published). Nothing is installed yet. */
+    data class ReadyToInstall(val info: UpdateInfo, val file: java.io.File, val sha256: String, val verified: Boolean) : UpdateState()
+    data class DownloadFailed(val info: UpdateInfo, val reason: DownloadError, val message: String, val cause: Throwable? = null) : UpdateState()
+
+    val isTerminal: Boolean get() = this !is Idle && this !is Checking && this !is Downloading
+}
+
+enum class DownloadError {
+    NETWORK, HTTP, TIMEOUT, INTERRUPTED, INSUFFICIENT_STORAGE, INVALID_RESPONSE, CHECKSUM_MISMATCH, CANCELLED, STORAGE_IO, UNKNOWN
 }
 
 enum class UpdateError {

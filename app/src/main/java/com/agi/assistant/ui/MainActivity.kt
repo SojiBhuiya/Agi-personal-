@@ -18,6 +18,7 @@ import com.agi.assistant.core.ai.ProviderType
 import com.agi.assistant.core.ai.Role
 import com.agi.assistant.core.tools.PermissionNeed
 import com.agi.assistant.core.update.UpdateManager
+import com.agi.assistant.core.update.UpdateMessages
 import com.agi.assistant.core.update.UpdateState
 import com.agi.assistant.util.mainScope
 import com.agi.assistant.voice.Speaker
@@ -51,9 +52,11 @@ class MainActivity : Activity(), VoiceInput.Listener {
     private var voice: VoiceInput? = null
     private var pendingNeed: PermissionNeed? = null
     private var updateAvailable: UpdateState.UpdateAvailable? = null
-    private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy) }
+    private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy, app.updateManager) }
+    private var updateReady: UpdateState.ReadyToInstall? = null
     private val updateObserver = UpdateManager.Observer { state ->
         updateAvailable = state as? UpdateState.UpdateAvailable
+        updateReady = state as? UpdateState.ReadyToInstall
         if (pendingNeed == null) refreshStatus()
         // Non-intrusive prompt: policy allows it once per session per release, honours "Later".
         if (state is UpdateState.UpdateAvailable && app.updatePolicy.shouldPrompt(state.info)) {
@@ -161,7 +164,13 @@ class MainActivity : Activity(), VoiceInput.Listener {
         }
         if (pendingNeed == null) {
             val upd = updateAvailable
-            if (upd != null) {
+            val ready = updateReady
+            if (ready != null) {
+                showBanner("${UpdateMessages.DOWNLOADED}: ${ready.info.versionName} is ready to install.") {
+                    updateDialog.show(ready.info, app.installedVersion().versionName)
+                }
+                findViewById<Button>(R.id.bannerAction).text = "Install"
+            } else if (upd != null) {
                 showBanner("Update available: ${upd.info.versionName} (you have ${app.installedVersion().versionName}).") {
                     updateDialog.show(upd.info, app.installedVersion().versionName)
                 }

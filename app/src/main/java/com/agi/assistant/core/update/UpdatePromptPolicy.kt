@@ -1,5 +1,7 @@
 package com.agi.assistant.core.update
 
+import java.util.Locale
+
 /** Persistence needed by [UpdatePromptPolicy]; backed by SharedPreferences in the app, by a map in tests. */
 interface UpdatePreferences {
     /** Release tag the user tapped "Later" on, or null. */
@@ -60,6 +62,15 @@ object UpdateMessages {
     const val UP_TO_DATE = "You’re using the latest version."
     const val ERROR = "Unable to check for updates. Please try again later."
     const val TITLE = "New Update Available"
+    const val DOWNLOADING = "Downloading update..."
+    const val DOWNLOADED = "Update downloaded"
+    const val DOWNLOAD_FAILED = "Download failed"
+
+    fun mb(bytes: Long): String = "%.1f MB".format(Locale.US, bytes / 1024.0 / 1024.0)
+
+    /** "1.2 MB of 4.8 MB" or "1.2 MB" when the total is unknown. */
+    fun progressDetail(done: Long, total: Long): String =
+        if (total > 0) "${mb(done)} of ${mb(total)}" else mb(done)
 
     fun statusLine(state: UpdateState, installedVersion: String): String = when (state) {
         UpdateState.Idle -> "Updates are fetched from GitHub Releases."
@@ -67,6 +78,9 @@ object UpdateMessages {
         is UpdateState.UpToDate -> UP_TO_DATE + " (${state.installedVersion})"
         is UpdateState.UpdateAvailable -> "$TITLE: ${state.info.versionName} (you have $installedVersion)" +
             if (state.info.isMandatory) " • required" else ""
+        is UpdateState.Downloading -> DOWNLOADING + (if (state.percent >= 0) " ${state.percent}%" else "")
+        is UpdateState.ReadyToInstall -> "$DOWNLOADED: ${state.info.versionName}" + if (state.verified) " (verified)" else ""
+        is UpdateState.DownloadFailed -> "$DOWNLOAD_FAILED: ${state.message}"
         is UpdateState.Error -> when (state.reason) {
             UpdateError.HTTP -> if (state.message.startsWith("No releases")) UP_TO_DATE + " No releases published yet." else ERROR
             UpdateError.NO_APK_ASSET -> "The latest release has no Android package yet. Please try again later."

@@ -73,6 +73,8 @@ class GitHubReleaseUpdateChecker(
                 htmlUrl = release.htmlUrl,
                 isNewerVersion = newer,
                 isMandatory = release.mandatory,
+                apkSha256 = release.sha256,
+                checksumAssetUrl = release.checksumAssetUrl,
             )
         )
     }

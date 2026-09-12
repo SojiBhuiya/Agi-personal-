@@ -10,6 +10,7 @@
 | Provider adapters vs mock OpenAI & Gemini servers (request shape, tool-call parsing, tool-result echo, HTTP error surfacing) | `ProviderWireTest` + `scripts/mock_ai_server.py` | ✅ 14/14 |
 | Update system – SemVer, GitHub release parsing, asset selection, error/network states, manager state machine | `UpdateCheckerTest` | ✅ 82/82 |
 | Update UI – prompt policy (dedupe, Later/snooze, mandatory), message formatting | `UpdateUiPolicyTest` | ✅ 27/27 |
+| APK downloader – success/progress, SHA-256 (inline, `.sha256`, `SHA256SUMS`), 404/5xx, HTML/empty/tiny/non-ZIP/size-mismatch responses, http refused, truncated stream → resume via Range, no-Range restart, timeouts, insufficient storage (pre-check + ENOSPC), cancellation cleanup, manager transitions (download/retry/cancel/discard) | `ApkDownloaderTest` | ✅ 62/62 |
 | R8 whole-program reference check against `android.jar` | manual | ✅ no missing framework refs |
 | APK structure: manifest (services, provider, queries, permissions), resources, alignment, v1/v2/v3 signatures | `aapt2 dump badging`, `zipalign -c` | ✅ |
 

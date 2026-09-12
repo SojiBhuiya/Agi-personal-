@@ -43,7 +43,7 @@ to the notes.
 
 * **Dialog** (`ui/UpdateDialog.kt`, `layout/dialog_update.xml`): "New Update Available", current
   version, new version, release date/size, *What's New* (Markdown bullets normalised), **UPDATE** and
-  **LATER**. UPDATE currently opens the GitHub release page; Phase 3 replaces it with in-app install.
+  **LATER**. UPDATE starts the in-app download (Phase 3).
 * **Non-intrusive policy** (`core/update/UpdatePromptPolicy.kt`): prompt only for newer releases,
   once per session per tag (no duplicate dialogs), and never within 24 h of a "Later" tap.
   A release is **mandatory** when its notes contain `mandatory: true` or `[mandatory]` – then LATER is
@@ -55,8 +55,35 @@ to the notes.
 * Tests: `UpdateUiPolicyTest` (27 checks) covers dedupe, postponement/snooze expiry, mandatory rules,
   marker parsing and message formatting.
 
-## Phase 3 (next) – download & install
-`UpdateState.Downloading(progress)` / `Downloaded(file)` / `Installing`; download the
-`apkDownloadUrl` with `DownloadManager` into app-private storage, verify size/SHA-256 when a
-`*.apk.sha256` asset exists, then hand the file to the system installer via
-`PackageInstaller`/`ACTION_VIEW` with a `FileProvider` URI (requires `REQUEST_INSTALL_PACKAGES`).
+## Phase 3 (implemented) – APK download
+
+* **`core/update/ApkDownloader.kt`** streams `UpdateInfo.apkDownloadUrl` (the GitHub asset URL from
+  the release check – nothing is hard-coded, HTTPS only) into app-private storage
+  `noBackupFilesDir/updates/<tag>-<asset>.apk`. The installed app is never touched.
+* **Never reports "complete" unless it is**: data goes to a `.part` file; it is renamed to `.apk` only
+  after byte count == Content-Length (and == the release asset size), the file is a ZIP (APK magic),
+  is at least 50 KB and has a non-HTML content type. If the release publishes a SHA-256 (inline
+  `sha256: <hex>` / `<hex>  <apk>` line in the notes, a `<apk>.sha256` asset, `SHA256SUMS`, or
+  `checksums.txt`) the digest is verified and a mismatch deletes the file
+  (`DownloadError.CHECKSUM_MISMATCH`). `ReadyToInstall.verified` tells the UI whether a checksum was checked.
+* **Failure handling** → `UpdateState.DownloadFailed(reason, message)`: `NETWORK`, `TIMEOUT`
+  (slow/unresponsive), `INTERRUPTED` (connection closed early – partial kept, resumed with `Range` on
+  retry, restarted if the server ignores ranges), `INSUFFICIENT_STORAGE` (checked up front against
+  Content-Length + 8 MB and detected via ENOSPC mid-way), `HTTP` (4xx/5xx), `INVALID_RESPONSE`
+  (empty/tiny/HTML/non-ZIP/size mismatch/plain http), `CANCELLED`. One automatic retry for transient
+  errors, then the user gets **RETRY**. Cancelling or non-resumable failures delete the `.part`;
+  `cleanupStale()` removes leftovers older than 7 days at app start.
+* **State machine** (`UpdateManager`): `UpdateAvailable → Downloading(bytes,total) → ReadyToInstall(file, sha256, verified)`
+  or `DownloadFailed`; `startDownload / cancelDownload / retryDownload / discardDownload`. A re-check
+  keeps `ReadyToInstall` when the staged tag is still the newest. Downloads run on `Dispatchers.IO`
+  in the app scope, so the assistant stays fully usable; the dialog can be dismissed while downloading.
+* **UI**: dialog shows "Downloading update... 62%" with a progress bar and "1.2 MB of 4.8 MB",
+  **CANCEL**; on completion "Update downloaded" + **INSTALL**; on failure the message + **RETRY**.
+  Home banner "Update downloaded: X is ready to install." and Settings status reflect the same state.
+  **No auto-install**: INSTALL is a placeholder until Phase 4 – nothing is installed automatically.
+* Tests: `ApkDownloaderTest` (62 checks, local HTTP server + stub connections).
+
+## Phase 4 (next) – install
+Hand the staged file to the system installer (`PackageInstaller` / `ACTION_VIEW` with a `FileProvider`
+URI, `REQUEST_INSTALL_PACKAGES`), handle the "unknown sources" permission flow, and remove the staged
+APK once the installed `versionCode` matches.

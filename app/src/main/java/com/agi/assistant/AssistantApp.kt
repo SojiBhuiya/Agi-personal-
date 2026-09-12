@@ -6,12 +6,15 @@ import com.agi.assistant.core.agent.ConversationStore
 import com.agi.assistant.core.permissions.PermissionManager
 import com.agi.assistant.core.settings.SecureSettings
 import com.agi.assistant.core.tools.ToolRegistry
+import com.agi.assistant.core.update.ApkDownloader
 import com.agi.assistant.core.update.GitHubReleaseUpdateChecker
 import com.agi.assistant.core.update.InstalledVersion
 import com.agi.assistant.core.update.UpdateManager
 import com.agi.assistant.core.update.UpdatePromptPolicy
 import com.agi.assistant.core.update.UpdateRepository
+import com.agi.assistant.util.MainDispatcher
 import com.agi.assistant.util.mainScope
+import java.io.File
 import com.agi.assistant.voice.Speaker
 import android.os.Build
 
@@ -39,10 +42,18 @@ class AssistantApp : Application() {
         agent = AssistantAgent(this, settings, tools, conversation)
         Speaker.enabled = settings.speakReplies
         updatePolicy = UpdatePromptPolicy(settings)
+        // APKs are staged in app-private storage (no permission needed, not visible to other apps
+        // until Phase 4 shares it with the installer through a content URI).
+        val downloadDir = File(noBackupFilesDir, "updates")
+        val downloader = ApkDownloader(downloadDir)
         updateManager = UpdateManager(
             UpdateRepository(GitHubReleaseUpdateChecker(), ::installedVersion),
             mainScope(),
+            downloader = downloader,
+            notifyDispatcher = MainDispatcher,
         )
+        // Drop incomplete partials and week-old packages; a recent complete file is reused (after re-verification).
+        downloader.cleanupStale()
     }
 
     /** Installed version straight from PackageManager (never hard-coded). */

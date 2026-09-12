@@ -26,6 +26,10 @@ data class UpdateInfo(
      * Mandatory updates cannot be postponed from the update dialog.
      */
     val isMandatory: Boolean = false,
+    /** Expected SHA-256 (lower-case hex) of the APK when the release publishes one; null = unverified. */
+    val apkSha256: String? = null,
+    /** HTTPS URL of a checksum asset (`<apk>.sha256` or `SHA256SUMS`) to fetch before installing, if [apkSha256] is not inline. */
+    val checksumAssetUrl: String? = null,
 ) {
     val version: SemanticVersion? get() = SemanticVersion.parse(versionName)
 }

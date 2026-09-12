@@ -1,8 +1,10 @@
 package com.agi.assistant
 
 import com.agi.assistant.core.update.*
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.URI
+import java.util.concurrent.Executors
 import kotlinx.coroutines.*
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -10,7 +12,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
-import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.security.MessageDigest
@@ -40,7 +41,42 @@ object ApkDownloaderTest {
         UpdateInfo("0.2.0", null, "v0.2.0", "AGI 0.2.0", "notes", url, name, size, "2026-09-12T10:00:00Z",
             "https://github.com/SojiBhuiya/Agi-personal-/releases/tag/v0.2.0", isNewerVersion = true, apkSha256 = sha256, checksumAssetUrl = checksumUrl)
 
-    // ---- local server ---------------------------------------------------------------
+    // ---- minimal local HTTP/1.0 server (plain sockets: works on both the JDK and the Android
+    //      unit-test classpath, which lacks com.sun.net.httpserver) ------------------------
+    class Headers { private val m = LinkedHashMap<String, MutableList<String>>(); fun add(k: String, v: String) { m.getOrPut(k.lowercase()) { ArrayList() }.add(v) }
+        fun getFirst(k: String): String? = m[k.lowercase()]?.firstOrNull(); fun entries() = m.entries }
+    class HttpExchange(val requestURI: URI, val requestHeaders: Headers, private val out: OutputStream) {
+        val responseHeaders = Headers(); private var headersSent = false; private var expected = 0L
+        fun sendResponseHeaders(code: Int, length: Long) {
+            if (headersSent) return; headersSent = true; expected = length
+            val sb = StringBuilder("HTTP/1.0 $code ${if (code == 206) "Partial Content" else if (code >= 400) "Error" else "OK"}\r\n")
+            if (responseHeaders.getFirst("Content-Type") == null) responseHeaders.add("Content-Type", "application/octet-stream")
+            if (length >= 0) responseHeaders.add("Content-Length", length.toString())
+            responseHeaders.add("Connection", "close")
+            responseHeaders.entries().forEach { (k, vs) -> vs.forEach { sb.append(k).append(": ").append(it).append("\r\n") } }
+            sb.append("\r\n"); out.write(sb.toString().toByteArray()); out.flush()
+        }
+        val responseBody: OutputStream get() = out
+        fun close() { runCatching { out.flush() }; runCatching { out.close() } }
+    }
+    class HttpServer private constructor(private val socket: ServerSocket) {
+        val address get() = socket.localSocketAddress as java.net.InetSocketAddress
+        private var handler: (HttpExchange) -> Unit = {}
+        private val pool = Executors.newCachedThreadPool { r -> Thread(r).apply { isDaemon = true } }
+        fun createContext(path: String, h: (HttpExchange) -> Unit) { handler = h }
+        fun start() { pool.execute { while (!socket.isClosed) { val c = runCatching { socket.accept() }.getOrNull() ?: break; pool.execute { handle(c) } } } }
+        fun stop(delay: Int) { runCatching { socket.close() }; pool.shutdownNow() }
+        private fun handle(c: Socket) = c.use { sock ->
+            val input = sock.getInputStream().buffered(); val out = sock.getOutputStream().buffered()
+            fun line(): String { val sb = StringBuilder(); while (true) { val b = input.read(); if (b < 0 || b == '\n'.code) break; if (b != '\r'.code) sb.append(b.toChar()) }; return sb.toString() }
+            val req = line(); if (req.isBlank()) return@use
+            val target = req.split(' ').getOrElse(1) { "/" }
+            val h = Headers(); while (true) { val l = line(); if (l.isEmpty()) break; val i = l.indexOf(':'); if (i > 0) h.add(l.substring(0, i).trim(), l.substring(i + 1).trim()) }
+            val ex = HttpExchange(URI(target), h, out)
+            try { handler(ex) } catch (_: Exception) {} finally { ex.close() }
+        }
+        companion object { fun create(addr: java.net.InetSocketAddress, backlog: Int) = HttpServer(ServerSocket(addr.port, 50, addr.address)) }
+    }
     private lateinit var server: HttpServer
     private val routes = HashMap<String, (HttpExchange) -> Unit>()
     private fun serve(path: String, handler: (HttpExchange) -> Unit) { routes[path] = handler }
@@ -79,7 +115,7 @@ object ApkDownloaderTest {
 
     @JvmStatic
     fun main(args: Array<String>) = runBlocking {
-        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server = HttpServer.create(java.net.InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { ex -> (routes[ex.requestURI.path] ?: { e: HttpExchange -> e.sendResponseHeaders(404, -1); e.close() })(ex) }
         server.start()
         try { runAll() } finally { server.stop(0) }

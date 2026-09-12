@@ -15,7 +15,7 @@ Android framework. compileSdk 34, minSdk 26, targetSdk 34, Kotlin 2.0.
 > or let Android Studio generate it.
 
 ## Option B – Offline toolchain (`scripts/build_apk.sh`)
-This is how `dist/agi-assistant-0.2.0-release.apk` was produced, in an
+This is how the signed APK from the **Release build (signed)** GitHub Actions artifact was produced, in an
 environment where Google's Maven/SDK servers were unreachable. It performs the
 same steps Gradle does:
 
@@ -46,18 +46,37 @@ scripts/run_tests.sh                                     # JVM tests
 
 ## Signing
 
+### CI release build (GitHub Actions – the canonical way to sign releases)
+`.github/workflows/release.yml` builds and signs the release APK on every push / tag / manual run:
+
+1. Verifies the four repository secrets exist (`AGI_RELEASE_KEYSTORE_BASE64`, `AGI_RELEASE_STORE_PASSWORD`,
+   `AGI_RELEASE_KEY_ALIAS`, `AGI_RELEASE_KEY_PASSWORD`) without printing them.
+2. Decodes the keystore into `$RUNNER_TEMP` (mode 600) and exports only its **path** as
+   `AGI_RELEASE_KEYSTORE_FILE`; `app/build.gradle.kts` reads the path + passwords from the
+   environment and creates the `release` signing config (v1+v2+v3). Without those variables the
+   release build type stays unsigned, so local builds are unchanged.
+3. Runs the JVM suites (`gradle coreTests` + `providerWireTest`), `lintRelease` (report only), then `assembleRelease`.
+4. **Verifies** with `apksigner`: v1/v2/v3 all true, exactly one signer, and the signer certificate
+   SHA-256 equals the pinned `EXPECTED_CERT_SHA256` – otherwise the job fails. Also checks
+   `zipalign`, `package=com.agi.assistant`, and that versionName/versionCode match `build.gradle.kts`.
+5. Uploads `agi-assistant-<version>-release.apk` + `.sha256` as a workflow artifact (no GitHub
+   Release is created – publishing stays a manual step).
+6. Shreds the temporary keystore (`if: always()`).
+
+To rotate the pin after a (deliberate) key change, update `EXPECTED_CERT_SHA256` in the workflow
+and the table below in the same commit.
+
+
 ### Release signing (persistent key – REQUIRED for every release)
 Android only updates an app in place when the new APK is signed with the **same key** as the installed
-one. AGI Assistant 0.2.0 and every later release are signed with the persistent release key:
+one. AGI Assistant 0.2.0 and every later release are signed with the persistent release key, which lives **only** in the owner's backup and in GitHub Actions secrets (base64):
 
 | | |
 |---|---|
 | Alias | `agi-release` |
-| Key | RSA 4096, SHA256withRSA, valid ~30 years |
-| Subject | `CN=AGI Assistant Release, OU=Release, O=AGI Assistant, C=BD` |
-| Valid | 2026-09-12 → 2056-09-04 |
-| History | An earlier key (fingerprint `D7:0A:77:…`) was generated on 2026-09-12 but lost before any APK signed with it was published; it is void. The key above is the only valid release key. |
-| Certificate SHA-256 | `6C:E0:19:93:BC:93:EC:15:C1:35:1E:DC:29:A8:3C:84:55:92:8B:8E:5A:4E:53:DE:39:E9:39:9B:51:DF:E1:A8` |
+| Key | generated and held by the project owner; only the certificate fingerprint is public |
+| History | Two earlier keys (`D7:0A:77:…`, `6C:E0:19:…`) were generated in an ephemeral sandbox on 2026-09-12 and lost before anything signed with them was published; both are void. |
+| Certificate SHA-256 | `5F:25:0D:82:3B:07:65:71:67:CF:7F:F9:41:E1:BB:5E:37:0C:D7:A9:5C:0E:E5:A9:D4:55:12:F2:F3:29:8E:8C` |
 
 The keystore file and its password are **not in the repository** (`*.jks`, `*.keystore`,
 `.signing.env` are git-ignored) and must be backed up privately (password manager + offline copy).

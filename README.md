@@ -16,7 +16,7 @@ Service, MediaStore, SpeechRecognizer, TextToSpeech…).
 * **Permission management** – every capability is optional and requested
   through the standard Android permission UI.
 
-📦 **Install:** `dist/agi-assistant-0.2.0-release.apk` (Android 8.0+ / API 26+).
+📦 **Install:** the signed APK from the **Release build (signed)** GitHub Actions artifact (Android 8.0+ / API 26+).
 Enable *"Install unknown apps"* for your file manager/browser, open the APK,
 then open the app → shield icon → grant what you want the assistant to do.
 

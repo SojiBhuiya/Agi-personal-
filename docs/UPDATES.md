@@ -157,3 +157,14 @@ different key, the installer fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`; th
 
 ## Later ideas
 Background download via WorkManager-equivalent, delta updates, changelog history screen.
+
+## Release checklist (used for 0.2.0)
+1. Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts` – never change `applicationId`.
+2. `scripts/run_tests.sh` → all suites green; `scripts/build_apk.sh release` (zero compiler warnings).
+3. Verify: `aapt2 dump badging dist/agi-assistant-<v>-release.apk` shows `com.agi.assistant`, the new
+   versionName and a higher versionCode; `zipalign -c` passes; signer certificate fingerprint matches
+   the previous release (see BUILD.md – same key or Android refuses the update).
+4. `dist/SHA256SUMS` + `dist/<apk>.sha256` regenerated; `dist/RELEASE_NOTES_<v>.md` contains
+   `versionCode: N` and `sha256: <hex>` markers (the checker reads both from the release body).
+5. Commit `release: prepare AGI Assistant <v>`, tag `v<v>`, create the GitHub Release with the APK,
+   the `.sha256` file and the notes as body. The tag **must** be `v<versionName>`.

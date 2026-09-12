@@ -15,7 +15,7 @@ Android framework. compileSdk 34, minSdk 26, targetSdk 34, Kotlin 2.0.
 > or let Android Studio generate it.
 
 ## Option B – Offline toolchain (`scripts/build_apk.sh`)
-This is how `dist/agi-assistant-0.1.0-debug.apk` was produced, in an
+This is how `dist/agi-assistant-0.2.0-release.apk` was produced, in an
 environment where Google's Maven/SDK servers were unreachable. It performs the
 same steps Gradle does:
 
@@ -66,4 +66,4 @@ backed up, and bump `versionCode` for each release. Different key ⇒ Android re
 4. (Optional) Settings ⚙ → pick a preset (e.g. Groq free tier) → paste your
    key → *Test connection* → Save.
 
-`adb install -r dist/agi-assistant-0.1.0-debug.apk` also works.
+`adb install -r dist/agi-assistant-0.2.0-release.apk` also works.

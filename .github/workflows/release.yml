@@ -113,37 +113,39 @@ jobs:
       - name: Verify signature, certificate fingerprint and package metadata
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
-          echo "== apksigner verify"
-          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/verify.txt
-          { echo "### apksigner verify"; echo '```'; grep -E "^Verifie|Signer #1 certificate SHA-256|WARNING|DOES NOT" /tmp/verify.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          grep -q "^Verifies$" /tmp/verify.txt || { echo "::error::apksigner: APK does not verify"; exit 1; }
-          # minSdk is 26: Android installs/updates via v2/v3 (v1 is only consulted below API 24 and is
-          # omitted by AGP for min-sdk >= 24). v2 and v3 are mandatory; v1 is reported for information.
-          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || { echo "::error::v2 signature missing"; exit 1; }
-          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || { echo "::error::v3 signature missing"; exit 1; }
-          grep -q "Verified using v1 scheme (JAR signing): true" /tmp/verify.txt && echo "v1 (JAR) signature present" || echo "::notice::v1 (JAR) signature not present – not required for minSdk 26"
-          ACTUAL=$(grep -m1 "Signer #1 certificate SHA-256 digest:" /tmp/verify.txt | awk '{print $NF}' | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          S="$GITHUB_STEP_SUMMARY"
+          fail() { echo "::error::$1"; echo "❌ $1" >> "$S"; exit 1; }
+          echo "### Release verification" >> "$S"
+          echo "build-tools: $BT / apk: $APK" >> "$S"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" > /tmp/verify.txt 2>&1; RC=$?
+          cat /tmp/verify.txt
+          { echo '```'; grep -E "^Verifie|certificate SHA-256|WARNING|DOES NOT" /tmp/verify.txt | head -20; echo '```'; } >> "$S"
+          [ $RC -eq 0 ] || fail "apksigner verify exited $RC"
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || fail "v2 signature missing"
+          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || fail "v3 signature missing"
+          grep -q "Verified using v1 scheme (JAR signing): true" /tmp/verify.txt && echo "v1 present" >> "$S" || echo "v1 (JAR) absent – not required for minSdk 26" >> "$S"
+          RAW=$(grep -m1 "Signer #1 certificate SHA-256 digest:" /tmp/verify.txt | awk '{print $NF}')
+          ACTUAL=$(echo "$RAW" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
           EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr 'a-f' 'A-F')
-          echo "expected certificate: $EXPECTED"
-          echo "actual   certificate: $ACTUAL"
-          [ "$ACTUAL" = "$EXPECTED" ] || { echo "::error::Release APK is NOT signed with the persistent release key"; exit 1; }
+          { echo "expected certificate: $EXPECTED"; echo "actual certificate:   $ACTUAL"; } | tee -a "$S"
+          [ -n "$ACTUAL" ] || fail "could not read signer certificate from apksigner output"
+          [ "$ACTUAL" = "$EXPECTED" ] || fail "Release APK is NOT signed with the persistent release key"
           SIGNERS=$(grep -c "certificate SHA-256 digest:" /tmp/verify.txt || true)
-          [ "$SIGNERS" -eq 1 ] || { echo "::error::Expected exactly one signer, found $SIGNERS"; exit 1; }
-          echo "== zipalign"
-          "$BT/zipalign" -c -p 4 "$APK" && echo "zipalign OK"
-          echo "== badging"
-          "$BT/aapt2" dump badging "$APK" | head -1 | tee /tmp/badging.txt
-          grep -q "package: name='$EXPECTED_APPLICATION_ID'" /tmp/badging.txt || { echo "::error::applicationId mismatch"; exit 1; }
-          VN=$(grep -oP "versionName='\K[^']+" /tmp/badging.txt); VC=$(grep -oP "versionCode='\K[^']+" /tmp/badging.txt)
+          [ "$SIGNERS" -eq 1 ] || fail "Expected exactly one signer, found $SIGNERS"
+          "$BT/zipalign" -c -p 4 "$APK" || fail "zipalign check failed"
+          echo "zipalign OK" >> "$S"
+          "$BT/aapt2" dump badging "$APK" > /tmp/badging.txt 2>&1 || fail "aapt2 dump badging failed"
+          head -1 /tmp/badging.txt | tee -a "$S"
+          grep -q "package: name='$EXPECTED_APPLICATION_ID'" /tmp/badging.txt || fail "applicationId mismatch"
+          VN=$(grep -oP "versionName='\K[^']+" /tmp/badging.txt | head -1); VC=$(grep -oP "versionCode='\K[^']+" /tmp/badging.txt | head -1)
           GVN=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts); GVC=$(grep -oP 'versionCode = \K\d+' app/build.gradle.kts)
-          [ "$VN" = "$GVN" ] && [ "$VC" = "$GVC" ] || { echo "::error::APK version $VN ($VC) != build.gradle.kts $GVN ($GVC)"; exit 1; }
+          [ "$VN" = "$GVN" ] && [ "$VC" = "$GVC" ] || fail "APK version $VN ($VC) != build.gradle.kts $GVN ($GVC)"
           OUT="agi-assistant-$VN-release.apk"; mkdir -p out; cp "$APK" "out/$OUT"
-          (cd out && sha256sum "$OUT" > "$OUT.sha256" && cat "$OUT.sha256")
+          (cd out && sha256sum "$OUT" > "$OUT.sha256" && cat "$OUT.sha256") | tee -a "$S"
           echo "APK_NAME=$OUT" >> "$GITHUB_ENV"
-          { echo "### AGI Assistant $VN (versionCode $VC) – signed release"
-            echo '```'; cat "out/$OUT.sha256"; echo "certificate SHA-256: $ACTUAL"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ signed with the persistent release key; versionName $VN, versionCode $VC" >> "$S"
 
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4

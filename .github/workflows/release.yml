@@ -117,9 +117,13 @@ jobs:
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           echo "== apksigner verify"
           "$BT/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/verify.txt
-          grep -q "Verified using v1 scheme (JAR signing): true" /tmp/verify.txt || { echo "::error::v1 signature missing"; exit 1; }
+          { echo "### apksigner verify"; echo '```'; grep -E "^Verifie|Signer #1 certificate SHA-256|WARNING|DOES NOT" /tmp/verify.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep -q "^Verifies$" /tmp/verify.txt || { echo "::error::apksigner: APK does not verify"; exit 1; }
+          # minSdk is 26: Android installs/updates via v2/v3 (v1 is only consulted below API 24 and is
+          # omitted by AGP for min-sdk >= 24). v2 and v3 are mandatory; v1 is reported for information.
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/verify.txt || { echo "::error::v2 signature missing"; exit 1; }
           grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/verify.txt || { echo "::error::v3 signature missing"; exit 1; }
+          grep -q "Verified using v1 scheme (JAR signing): true" /tmp/verify.txt && echo "v1 (JAR) signature present" || echo "::notice::v1 (JAR) signature not present – not required for minSdk 26"
           ACTUAL=$(grep -m1 "Signer #1 certificate SHA-256 digest:" /tmp/verify.txt | awk '{print $NF}' | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
           EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr 'a-f' 'A-F')
           echo "expected certificate: $EXPECTED"

@@ -17,6 +17,7 @@ import com.agi.assistant.core.agent.AgentEvent
 import com.agi.assistant.core.ai.ProviderType
 import com.agi.assistant.core.ai.Role
 import com.agi.assistant.core.tools.PermissionNeed
+import com.agi.assistant.core.update.InstallError
 import com.agi.assistant.core.update.UpdateManager
 import com.agi.assistant.core.update.UpdateMessages
 import com.agi.assistant.core.update.UpdateState
@@ -54,9 +55,11 @@ class MainActivity : Activity(), VoiceInput.Listener {
     private var updateAvailable: UpdateState.UpdateAvailable? = null
     private val updateDialog by lazy { UpdateDialog(this, app.updatePolicy, app.updateManager) }
     private var updateReady: UpdateState.ReadyToInstall? = null
+    private var updateInstallError: UpdateState.InstallationError? = null
     private val updateObserver = UpdateManager.Observer { state ->
         updateAvailable = state as? UpdateState.UpdateAvailable
         updateReady = state as? UpdateState.ReadyToInstall
+        updateInstallError = state as? UpdateState.InstallationError
         if (pendingNeed == null) refreshStatus()
         // Non-intrusive prompt: policy allows it once per session per release, honours "Later".
         if (state is UpdateState.UpdateAvailable && app.updatePolicy.shouldPrompt(state.info)) {
@@ -143,7 +146,14 @@ class MainActivity : Activity(), VoiceInput.Listener {
 
     override fun onResume() {
         super.onResume()
+        updateDialog.installer.onActivityResumed()
         refreshStatus()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        if (updateDialog.installer.onActivityResult(requestCode, resultCode, data)) return
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
@@ -170,6 +180,12 @@ class MainActivity : Activity(), VoiceInput.Listener {
                     updateDialog.show(ready.info, app.installedVersion().versionName)
                 }
                 findViewById<Button>(R.id.bannerAction).text = "Install"
+            } else if (updateInstallError != null) {
+                val e = updateInstallError!!
+                showBanner(if (e.reason == InstallError.PERMISSION_REQUIRED) "${UpdateMessages.INSTALL_PERMISSION} to finish updating to ${e.info.versionName}." else "${UpdateMessages.INSTALL_FAILED}: ${e.message}") {
+                    updateDialog.show(e.info, app.installedVersion().versionName)
+                }
+                findViewById<Button>(R.id.bannerAction).text = if (e.reason == InstallError.PERMISSION_REQUIRED) "Allow" else "Details"
             } else if (upd != null) {
                 showBanner("Update available: ${upd.info.versionName} (you have ${app.installedVersion().versionName}).") {
                     updateDialog.show(upd.info, app.installedVersion().versionName)

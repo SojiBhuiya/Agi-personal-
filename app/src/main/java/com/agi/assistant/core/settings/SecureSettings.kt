@@ -67,6 +67,11 @@ class SecureSettings(context: Context) : UpdatePreferences {
         get() = prefs.getLong(KEY_UPDATE_POSTPONED_AT, 0L)
         set(v) = prefs.edit().putLong(KEY_UPDATE_POSTPONED_AT, v).apply()
 
+    /** "versionName|versionCode" of the release whose installer was launched; cleared once it is installed. */
+    var stagedUpdate: String?
+        get() = prefs.getString(KEY_UPDATE_STAGED, null)
+        set(v) = prefs.edit().putString(KEY_UPDATE_STAGED, v).apply()
+
     fun providerConfig() = ProviderConfig(providerType, baseUrl, model, apiKey)
 
     // ---- Encryption ---------------------------------------------------------
@@ -111,6 +116,7 @@ class SecureSettings(context: Context) : UpdatePreferences {
         private const val KEY_CONFIRM = "confirm_sensitive"
         private const val KEY_ONBOARDED = "onboarding_done"
         private const val KEY_UPDATE_POSTPONED_TAG = "update_postponed_tag"
+        private const val KEY_UPDATE_STAGED = "update_staged"
         private const val KEY_UPDATE_POSTPONED_AT = "update_postponed_at"
     }
 }

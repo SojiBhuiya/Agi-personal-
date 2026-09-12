@@ -53,6 +53,11 @@ keytool -genkeypair -v -keystore release.keystore -alias agi -keyalg RSA -keysiz
 KEYSTORE=release.keystore KEYSTORE_PASS=... scripts/build_apk.sh release
 ```
 
+**Signing-key consistency:** the in-app updater (docs/UPDATES.md) can only update in place when the
+new APK is signed with the *same* key as the installed one. Use one release keystore forever, keep it
+backed up, and bump `versionCode` for each release. Different key ⇒ Android rejects the update
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) and the user would have to uninstall, losing their data.
+
 ## Installing on a phone
 1. Copy the APK to the phone (USB, Drive, Telegram "Saved Messages"…).
 2. Open it; allow "Install unknown apps" for the app you opened it from.

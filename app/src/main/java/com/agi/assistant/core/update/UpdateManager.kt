@@ -40,6 +40,7 @@ class UpdateManager(
     fun checkNow(): Job {
         job?.takeIf { it.isActive }?.let { return it }
         if (state is UpdateState.Downloading) return downloadJob!!
+        if (state is UpdateState.InstallerLaunched) return job ?: scope.launch {} // don't disturb an install in progress
         setState(UpdateState.Checking)
         return scope.launch {
             val result = repository.checkForUpdate()
@@ -94,10 +95,69 @@ class UpdateManager(
 
     /** Discards a failed download and returns to the plain "update available" state. */
     fun discardDownload() {
-        val info = (state as? UpdateState.DownloadFailed)?.info ?: (state as? UpdateState.ReadyToInstall)?.info ?: return
+        val info = (state as? UpdateState.DownloadFailed)?.info ?: (state as? UpdateState.ReadyToInstall)?.info ?: (state as? UpdateState.InstallationError)?.info ?: return
         downloader?.cleanup(info)
         stagedInfo = null
         setState(UpdateState.UpdateAvailable(info))
+    }
+
+    // ---- Install (Phase 4) -------------------------------------------------------
+    // The manager never installs anything itself; the UI layer (ApkInstaller) launches the system
+    // installer and reports back through these methods so every screen shows the same state.
+
+    /** The system installer UI was opened for the staged file. */
+    fun markInstallerLaunched(file: java.io.File) {
+        val info = (state as? UpdateState.ReadyToInstall)?.info ?: (state as? UpdateState.InstallationError)?.info ?: stagedInfo ?: return
+        setState(UpdateState.InstallerLaunched(info, file))
+    }
+
+    /** Install could not start / failed. Keeps the file (for a retry) unless [discardFile]. */
+    fun markInstallFailed(reason: InstallError, message: String, discardFile: Boolean = false) {
+        val (info, file) = when (val s = state) {
+            is UpdateState.ReadyToInstall -> s.info to s.file
+            is UpdateState.InstallerLaunched -> s.info to s.file
+            is UpdateState.InstallationError -> s.info to s.file
+            else -> { val i = stagedInfo ?: return; i to (downloader?.targetFile(i) ?: return) }
+        }
+        if (discardFile) downloader?.cleanup(info)
+        setState(UpdateState.InstallationError(info, file, reason, message, discardFile))
+    }
+
+    /** User came back from the installer/settings without a result: allow INSTALL again if the file is still complete. */
+    fun installerReturned(): Job? {
+        val s = state as? UpdateState.InstallerLaunched ?: return null
+        val dl = downloader ?: run { setState(UpdateState.ReadyToInstall(s.info, s.file, "", false)); return null }
+        return scope.launch {
+            val ok = dl.existingComplete(s.info)
+            if (state !is UpdateState.InstallerLaunched) return@launch
+            if (ok != null) setState(UpdateState.ReadyToInstall(s.info, ok.file, ok.sha256, ok.verified))
+            else setState(UpdateState.InstallationError(s.info, s.file, InstallError.FILE_MISSING, "The downloaded update file is no longer available. Please download it again.", fileDiscarded = true))
+        }
+    }
+
+    /** After an [UpdateState.InstallationError]: back to ReadyToInstall (file kept) or re-download (file discarded). */
+    fun retryInstall(): Job? {
+        val s = state as? UpdateState.InstallationError ?: return null
+        return if (s.fileDiscarded) startDownload(s.info) else installerReturnedFrom(s)
+    }
+
+    private fun installerReturnedFrom(s: UpdateState.InstallationError): Job? {
+        setState(UpdateState.InstallerLaunched(s.info, s.file))
+        return installerReturned()
+    }
+
+    /**
+     * Called on app start: if the staged release is now the installed version, the update
+     * succeeded and the staged APK can be removed. Returns true when a cleanup happened.
+     */
+    fun reconcileInstalled(installedVersionName: String, installedVersionCode: Long): Boolean {
+        val dl = downloader ?: return false
+        val staged = stagedInfo ?: return false
+        if (!InstallPolicy.isInstalled(staged, installedVersionName, installedVersionCode)) return false
+        dl.cleanup(staged); stagedInfo = null
+        if (state is UpdateState.ReadyToInstall || state is UpdateState.InstallerLaunched || state is UpdateState.InstallationError)
+            setState(UpdateState.UpToDate(installedVersionName, staged))
+        return true
     }
 
     /** Called from app start; throttled so we do not hammer GitHub. */

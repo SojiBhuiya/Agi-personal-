@@ -11,6 +11,7 @@
 | Update system – SemVer, GitHub release parsing, asset selection, error/network states, manager state machine | `UpdateCheckerTest` | ✅ 82/82 |
 | Update UI – prompt policy (dedupe, Later/snooze, mandatory), message formatting | `UpdateUiPolicyTest` | ✅ 27/27 |
 | APK downloader – success/progress, SHA-256 (inline, `.sha256`, `SHA256SUMS`), 404/5xx, HTML/empty/tiny/non-ZIP/size-mismatch responses, http refused, truncated stream → resume via Range, no-Range restart, timeouts, insufficient storage (pre-check + ENOSPC), cancellation cleanup, manager transitions (download/retry/cancel/discard) | `ApkDownloaderTest` | ✅ 62/62 |
+| Installer flow – preflight (missing/empty file, package mismatch, versionCode not higher, invalid APK, unknown-apps permission), `INSTALL_FAILED_*` code mapping (signature mismatch, conflict, incompatible, storage, cancelled), post-restart reconciliation, manager states ReadyToInstall → InstallerLaunched → InstallationError → retry | `InstallFlowTest` | ✅ 43/43 |
 | R8 whole-program reference check against `android.jar` | manual | ✅ no missing framework refs |
 | APK structure: manifest (services, provider, queries, permissions), resources, alignment, v1/v2/v3 signatures | `aapt2 dump badging`, `zipalign -c` | ✅ |
 
@@ -20,6 +21,7 @@ platform APIs and API-level guards (`Build.VERSION.SDK_INT`) for every API
 newer than minSdk 26.
 
 ## Manual device checklist (next step for you)
+- Update install: Settings › Updates › Install with *Install unknown apps* off → Android settings opens for AGI Assistant → toggle on → back → INSTALL → system installer dialog → confirm → app restarts with new version, settings preserved. Also try cancelling in the installer (INSTALL must be available again).
 1. Install APK, open app – welcome card and chips render, dark theme.
 2. Type **Open YouTube** → YouTube launches; tool bubble "✓ open app".
 3. Tap mic → say **turn the volume up** → volume slider appears.

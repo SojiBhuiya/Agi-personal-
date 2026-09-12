@@ -42,9 +42,9 @@ class AssistantApp : Application() {
         agent = AssistantAgent(this, settings, tools, conversation)
         Speaker.enabled = settings.speakReplies
         updatePolicy = UpdatePromptPolicy(settings)
-        // APKs are staged in app-private storage (no permission needed, not visible to other apps
-        // until Phase 4 shares it with the installer through a content URI).
-        val downloadDir = File(noBackupFilesDir, "updates")
+        // APKs are staged in app-private storage; the package installer reads them through a
+        // content:// URI from AssistantFileProvider with a temporary read grant (never file://).
+        val downloadDir = com.agi.assistant.services.AssistantFileProvider.updatesRoot(this)
         val downloader = ApkDownloader(downloadDir)
         updateManager = UpdateManager(
             UpdateRepository(GitHubReleaseUpdateChecker(), ::installedVersion),
@@ -54,6 +54,13 @@ class AssistantApp : Application() {
         )
         // Drop incomplete partials and week-old packages; a recent complete file is reused (after re-verification).
         downloader.cleanupStale()
+        // If we restarted as the version whose installer was launched, the update succeeded: remove the APK.
+        settings.stagedUpdate?.let { staged ->
+            val v = installedVersion()
+            val name = staged.substringBefore('|'); val code = staged.substringAfter('|', "").toLongOrNull()
+            val installed = (code != null && code > 0 && v.versionCode >= code) || v.versionName == name
+            if (installed) { downloader.cleanupAll(); settings.stagedUpdate = null }
+        }
     }
 
     /** Installed version straight from PackageManager (never hard-coded). */

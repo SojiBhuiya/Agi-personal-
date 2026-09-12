@@ -8,6 +8,7 @@ import com.agi.assistant.R
 import com.agi.assistant.core.ai.*
 import com.agi.assistant.core.tools.ToolSpec
 import com.agi.assistant.core.update.UpdateError
+import com.agi.assistant.core.update.InstallError
 import com.agi.assistant.core.update.UpdateManager
 import com.agi.assistant.core.update.UpdateMessages
 import com.agi.assistant.core.update.UpdateState
@@ -103,9 +104,20 @@ class SettingsActivity : Activity() {
         app.updateManager.addObserver(updateObserver)
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateDialog.installer.onActivityResumed()
+    }
+
     override fun onStop() {
         app.updateManager.removeObserver(updateObserver)
         super.onStop()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        if (updateDialog.installer.onActivityResult(requestCode, resultCode, data)) return
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
@@ -132,6 +144,12 @@ class SettingsActivity : Activity() {
             is UpdateState.Downloading -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "View progress"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
             is UpdateState.ReadyToInstall -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Install"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
             is UpdateState.DownloadFailed -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Retry"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
+            is UpdateState.InstallerLaunched -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Install again"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
+            is UpdateState.InstallationError -> {
+                btnViewRelease.visibility = View.VISIBLE
+                btnViewRelease.text = if (state.reason == InstallError.PERMISSION_REQUIRED) "Allow & install" else "Details"
+                btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) }
+            }
             else -> {}
         }
         if (state is UpdateState.Error && state.reason != UpdateError.HTTP) {

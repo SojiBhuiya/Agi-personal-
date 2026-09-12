@@ -83,7 +83,55 @@ to the notes.
   **No auto-install**: INSTALL is a placeholder until Phase 4 – nothing is installed automatically.
 * Tests: `ApkDownloaderTest` (62 checks, local HTTP server + stub connections).
 
-## Phase 4 (next) – install
-Hand the staged file to the system installer (`PackageInstaller` / `ACTION_VIEW` with a `FileProvider`
-URI, `REQUEST_INSTALL_PACKAGES`), handle the "unknown sources" permission flow, and remove the staged
-APK once the installed `versionCode` matches.
+## Phase 4 (implemented) – install through the Android package installer
+
+Flow: **INSTALL** → preflight (`core/update/InstallPolicy.kt`) → *Install unknown apps* check →
+(if missing: `ACTION_MANAGE_UNKNOWN_APP_SOURCES` for `package:com.agi.assistant`, user returns, taps
+INSTALL again) → `ui/ApkInstaller.kt` launches the **system** installer → user confirms → Android
+replaces the app in place; data is preserved because the package name and signing key are unchanged.
+
+* **FileProvider**: the staged APK (`noBackupFilesDir/updates/…apk`) is exposed only through
+  `AssistantFileProvider` (`content://com.agi.assistant.files/updates/<name>`), `exported=false`,
+  `grantUriPermissions=true`, path canonicalised (no `..`). The installer gets a temporary
+  `FLAG_GRANT_READ_URI_PERMISSION`. **No `file://` URI is ever created.**
+* **Intent**: `ACTION_INSTALL_PACKAGE` with MIME `application/vnd.android.package-archive`,
+  `EXTRA_NOT_UNKNOWN_SOURCE`, `EXTRA_RETURN_RESULT` (so failures come back via `onActivityResult`),
+  fallback to `ACTION_VIEW` if no handler. `<queries>` declares the intent for Android 11+ visibility.
+* **Permission**: `REQUEST_INSTALL_PACKAGES` is declared (minSdk 26 → the per-app "Install unknown
+  apps" model applies on every supported version). `PackageManager.canRequestPackageInstalls()` is
+  checked before every launch; if false the settings screen for this app is opened – never a crash,
+  with fallbacks to the app-details page / security settings. On return the state flips back to
+  READY_TO_INSTALL automatically once the toggle is on.
+* **Preflight** before launching (JVM-tested): file exists & non-empty; `PackageManager.getPackageArchiveInfo`
+  parses it; package name **must** be `com.agi.assistant`; `versionCode` **must be higher** than the
+  installed one (otherwise Android rejects it – blocked with `NOT_NEWER`, file discarded).
+* **States**: `ReadyToInstall` (READY_TO_INSTALL) → `InstallerLaunched` (INSTALLER_LAUNCHED) →
+  system installs (app restarts as new version) / `InstallationError` (INSTALLATION_ERROR, with
+  `InstallError` reason: PERMISSION_REQUIRED, FILE_MISSING, PACKAGE_MISMATCH, NOT_NEWER, INVALID_APK,
+  NO_INSTALLER, USER_CANCELLED, SIGNATURE_MISMATCH, PACKAGE_CONFLICT, INCOMPATIBLE,
+  INSUFFICIENT_STORAGE, INSTALL_FAILED, UNKNOWN). `PackageManager.INSTALL_FAILED_*` codes from
+  `EXTRA_INSTALL_RESULT` are mapped to friendly messages ("App not installed", conflict, incompatible,
+  signature mismatch, storage). Coming back without a result (user cancelled) re-verifies the file and
+  returns to READY_TO_INSTALL so INSTALL can be pressed again.
+* **Honesty**: the app never says "installed". While the installer is open the UI says "Waiting for
+  Android to finish installing…". Success is only recognised on the next start, when the installed
+  `versionCode`/name matches the staged release (`SecureSettings.stagedUpdate` + `reconcileInstalled`),
+  at which point the staged APK is deleted.
+* **Never**: silent install, uninstall-before-install, or touching the installed package ourselves.
+* Tests: `InstallFlowTest` (43 checks).
+
+### Signing key – read before publishing a release
+Android only updates an app in place when the new APK is signed with the **same key** as the installed
+one (and has the same `applicationId` and a higher `versionCode`). If a release is signed with a
+different key, the installer fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`; the app surfaces this as
+"signed with a different key" and the user would have to uninstall (losing data). Therefore:
+
+1. Keep **one** release keystore for the lifetime of the app; back it up securely (loss = no more updates).
+2. Build every release with it: `KEYSTORE=release.keystore KEYSTORE_PASS=… scripts/build_apk.sh release`.
+3. Bump `versionCode` (and `versionName`) in `app/build.gradle.kts` for every release; the checker,
+   the preflight and Android itself all require it to increase.
+4. Never publish a debug-signed APK as a release – installs over a release build will fail.
+5. Publish the SHA-256 (`sha256: <hex>` in the notes or a `SHA256SUMS` asset) so downloads are verified.
+
+## Phase 5 (ideas)
+Background download via WorkManager-equivalent, delta updates, changelog history screen.

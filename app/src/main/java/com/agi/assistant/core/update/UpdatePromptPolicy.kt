@@ -65,6 +65,9 @@ object UpdateMessages {
     const val DOWNLOADING = "Downloading update..."
     const val DOWNLOADED = "Update downloaded"
     const val DOWNLOAD_FAILED = "Download failed"
+    const val INSTALLER_LAUNCHED = "Waiting for Android to finish installing"
+    const val INSTALL_FAILED = "Installation failed"
+    const val INSTALL_PERMISSION = "Allow installing updates"
 
     fun mb(bytes: Long): String = "%.1f MB".format(Locale.US, bytes / 1024.0 / 1024.0)
 
@@ -81,6 +84,8 @@ object UpdateMessages {
         is UpdateState.Downloading -> DOWNLOADING + (if (state.percent >= 0) " ${state.percent}%" else "")
         is UpdateState.ReadyToInstall -> "$DOWNLOADED: ${state.info.versionName}" + if (state.verified) " (verified)" else ""
         is UpdateState.DownloadFailed -> "$DOWNLOAD_FAILED: ${state.message}"
+        is UpdateState.InstallerLaunched -> "$INSTALLER_LAUNCHED ${state.info.versionName}. Confirm the prompt; the app restarts when done."
+        is UpdateState.InstallationError -> if (state.reason == InstallError.PERMISSION_REQUIRED) "$INSTALL_PERMISSION: ${state.message}" else "$INSTALL_FAILED: ${state.message}"
         is UpdateState.Error -> when (state.reason) {
             UpdateError.HTTP -> if (state.message.startsWith("No releases")) UP_TO_DATE + " No releases published yet." else ERROR
             UpdateError.NO_APK_ASSET -> "The latest release has no Android package yet. Please try again later."

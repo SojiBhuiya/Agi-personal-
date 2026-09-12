@@ -22,8 +22,10 @@ import java.util.TimeZone
  * failed (retry) → ready to install. One instance per Activity; [show] is a
  * no-op while already visible, so duplicate prompts are impossible.
  *
- * Phase 3: INSTALL is shown once the APK is downloaded and verified; the
- * actual hand-off to the system installer is Phase 4, so the button explains that.
+ * INSTALL hands the verified file to the Android package installer through
+ * [ApkInstaller]; the host Activity forwards `onResume` / `onActivityResult`
+ * via [installer] so the "allow unknown apps → return → INSTALL again" and
+ * installer-result flows work from either screen.
  */
 class UpdateDialog(
     private val activity: Activity,
@@ -34,6 +36,7 @@ class UpdateDialog(
     private var info: UpdateInfo? = null
     private var installedVersion = ""
     private val observer = UpdateManager.Observer { render(it) }
+    val installer = ApkInstaller(activity, manager)
 
     val isShowing: Boolean get() = dialog?.isShowing == true
 
@@ -58,7 +61,7 @@ class UpdateDialog(
         d.window?.setBackgroundDrawableResource(R.drawable.bg_card)
         d.setCancelable(!info.isMandatory)
         d.setCanceledOnTouchOutside(false)
-        d.setOnCancelListener { if (manager.state !is UpdateState.Downloading && manager.state !is UpdateState.ReadyToInstall) policy.postpone(info) }
+        d.setOnCancelListener { if (manager.state is UpdateState.UpdateAvailable) policy.postpone(info) }
         d.setOnDismissListener { manager.removeObserver(observer); if (dialog === d) dialog = null }
 
         policy.markShown(info)
@@ -90,6 +93,8 @@ class UpdateDialog(
             is UpdateState.Downloading -> state.info.releaseTag == i.releaseTag
             is UpdateState.ReadyToInstall -> state.info.releaseTag == i.releaseTag
             is UpdateState.DownloadFailed -> state.info.releaseTag == i.releaseTag
+            is UpdateState.InstallerLaunched -> state.info.releaseTag == i.releaseTag
+            is UpdateState.InstallationError -> state.info.releaseTag == i.releaseTag
             else -> false
         }
 
@@ -114,6 +119,34 @@ class UpdateDialog(
                 detail.text = (if (state.verified) "Checksum verified • " else "") + "${UpdateMessages.mb(state.file.length())} saved in app storage"
                 primary.text = "INSTALL"; primary.isEnabled = true
                 primary.setOnClickListener { onInstall(state) }
+                secondary.text = if (i.isMandatory) "" else "LATER"
+                secondary.visibility = if (i.isMandatory) View.GONE else View.VISIBLE
+                secondary.setOnClickListener { d.dismiss() }
+                d.setCancelable(!i.isMandatory)
+            }
+            state is UpdateState.InstallerLaunched && relevant -> {
+                showNotes(false); box.visibility = View.VISIBLE
+                status.text = UpdateMessages.INSTALLER_LAUNCHED
+                bar.isIndeterminate = true; percent.text = ""
+                detail.text = "Confirm the Android prompt to install ${i.versionName}. AGI Assistant will restart as the new version; your settings are kept."
+                primary.text = "INSTALL AGAIN"; primary.isEnabled = true
+                primary.setOnClickListener { manager.installerReturned() } // re-verifies file → ReadyToInstall → user taps INSTALL
+                secondary.text = "CLOSE"; secondary.visibility = View.VISIBLE
+                secondary.setOnClickListener { d.dismiss() }
+                d.setCancelable(true)
+            }
+            state is UpdateState.InstallationError && relevant -> {
+                showNotes(false); box.visibility = View.VISIBLE
+                val perm = state.reason == InstallError.PERMISSION_REQUIRED
+                status.text = if (perm) UpdateMessages.INSTALL_PERMISSION else UpdateMessages.INSTALL_FAILED
+                bar.isIndeterminate = false; bar.progress = if (state.fileDiscarded) 0 else 100; percent.text = ""
+                detail.text = state.message
+                primary.isEnabled = true
+                when {
+                    perm -> { primary.text = "OPEN SETTINGS"; primary.setOnClickListener { installer.openUnknownSourcesSettings() } }
+                    state.fileDiscarded -> { primary.text = "DOWNLOAD AGAIN"; primary.setOnClickListener { manager.retryInstall() } }
+                    else -> { primary.text = "RETRY"; primary.setOnClickListener { manager.retryInstall() } }
+                }
                 secondary.text = if (i.isMandatory) "" else "LATER"
                 secondary.visibility = if (i.isMandatory) View.GONE else View.VISIBLE
                 secondary.setOnClickListener { d.dismiss() }
@@ -145,10 +178,8 @@ class UpdateDialog(
         }
     }
 
-    /** Phase 4 wires this to the system package installer. */
-    private fun onInstall(state: UpdateState.ReadyToInstall) {
-        Toast.makeText(activity, "The update is downloaded and verified. Installing from inside the app arrives in the next version.", Toast.LENGTH_LONG).show()
-    }
+    /** Hands the verified APK to the system package installer (user confirms there; never silent). */
+    private fun onInstall(state: UpdateState.ReadyToInstall) = installer.install(state)
 
     private fun openRelease(info: UpdateInfo) {
         val url = info.htmlUrl.takeIf { it.startsWith("https://") } ?: info.apkDownloadUrl

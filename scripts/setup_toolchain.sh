@@ -83,14 +83,20 @@ EOF
 fi
 cat > "$TC/signer/sign.mjs" <<'EOF'
 import { readFileSync, writeFileSync } from 'node:fs';
-import { ApkSigner, SigningKey, convertToPEM } from 'apk_sign_ts';
-const [,, inApk, outApk, ks, pass] = process.argv;
+import { ApkSigner, SigningKey, parseKeystore } from 'apk_sign_ts';
+// Usage: node sign.mjs <in.apk> <out.apk> <keystore>
+// Secrets come ONLY from the environment (never argv, so they never show up in `ps` or logs):
+//   KEYSTORE_PASS  store password (required)
+//   KEY_ALIAS      alias to sign with (optional: first entry)
+const [,, inApk, outApk, ks] = process.argv;
+const pass = process.env.KEYSTORE_PASS;
+if (!pass) { console.error('KEYSTORE_PASS not set'); process.exit(2); }
 const apk = new Uint8Array(readFileSync(inApk));
-const { privateKey, certificate } = await convertToPEM(new Uint8Array(readFileSync(ks)), pass, 'jks');
+const { privateKey, certificate, alias } = await parseKeystore(new Uint8Array(readFileSync(ks)), pass, process.env.KEY_ALIAS || undefined);
 const signer = new ApkSigner({ signingKey: SigningKey.fromPEM(privateKey, certificate) });
 const { signedApk } = await signer.sign(apk);
 writeFileSync(outApk, signedApk);
-console.log('signed', outApk, signedApk.length);
+console.log('signed', outApk, signedApk.length, 'alias', alias);
 EOF
 
 echo "==> debug keystore"

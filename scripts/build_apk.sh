@@ -36,9 +36,33 @@ AAPT2="${AAPT2:-$TOOLCHAIN/aapt2}"
 R8="${R8:-$TOOLCHAIN/r8.jar}"
 ZIPALIGN="${ZIPALIGN:-$TOOLCHAIN/zipalign}"
 ANDROID_JAR="${ANDROID_JAR:-$TOOLCHAIN/android.jar}"
-KEYSTORE="${KEYSTORE:-$TOOLCHAIN/keys/debug.keystore}"
-KEYSTORE_PASS="${KEYSTORE_PASS:-android}"
 MIN_API=26
+
+# Signing -----------------------------------------------------------------------
+#   debug   : toolchain/keys/debug.keystore (generated, throw-away) unless KEYSTORE is set.
+#   release : REQUIRES the persistent release key. Configure via environment only:
+#               KEYSTORE=/secure/path/agi-release.jks   (kept OUTSIDE the repo; *.jks/*.keystore are git-ignored)
+#               KEYSTORE_PASS=...                        (never passed on a command line, never logged)
+#               KEY_ALIAS=agi-release                    (optional; defaults to the keystore's first entry)
+#             or put those three lines in $ROOT/.signing.env (git-ignored) – see docs/BUILD.md.
+#             Android only updates in place when every release is signed with the SAME key, so a
+#             release build with the debug key is refused unless ALLOW_DEBUG_KEY_RELEASE=1.
+if [ -f "$ROOT/.signing.env" ] && [ "$MODE" = "release" ]; then set -a; . "$ROOT/.signing.env"; set +a; fi
+if [ "$MODE" = "release" ]; then
+  if [ -z "${KEYSTORE:-}" ] || [ ! -f "$KEYSTORE" ]; then
+    echo "ERROR: release builds need the persistent release keystore: set KEYSTORE (path) and KEYSTORE_PASS," >&2
+    echo "       or create $ROOT/.signing.env (see docs/BUILD.md 'Release signing'). Run scripts/make_release_key.sh once." >&2
+    exit 1
+  fi
+  if [ -z "${KEYSTORE_PASS:-}" ]; then echo "ERROR: KEYSTORE_PASS not set (environment only; it is never echoed)." >&2; exit 1; fi
+  if [ "$(basename "$KEYSTORE")" = "debug.keystore" ] && [ "${ALLOW_DEBUG_KEY_RELEASE:-0}" != "1" ]; then
+    echo "ERROR: refusing to sign a release with the debug key." >&2; exit 1
+  fi
+else
+  KEYSTORE="${KEYSTORE:-$TOOLCHAIN/keys/debug.keystore}"
+  KEYSTORE_PASS="${KEYSTORE_PASS:-android}"
+fi
+export KEYSTORE_PASS KEY_ALIAS="${KEY_ALIAS:-}"
 
 APP_ID="com.agi.assistant"
 VERSION_CODE="$(grep -oP 'versionCode = \K\d+' "$ROOT/app/build.gradle.kts")"
@@ -89,11 +113,14 @@ LD_LIBRARY_PATH="$(dirname "$ZIPALIGN")/lib64:${LD_LIBRARY_PATH:-}" "$ZIPALIGN" 
 # 5. Sign -----------------------------------------------------------------------
 echo "==> sign"
 APK="$DIST/agi-assistant-$VERSION_NAME-$MODE.apk"
+echo "    keystore: $KEYSTORE (alias: ${KEY_ALIAS:-<first>})"
 if command -v apksigner >/dev/null 2>&1; then
-  apksigner sign --ks "$KEYSTORE" --ks-pass "pass:$KEYSTORE_PASS" --out "$APK" "$OUT/aligned.apk"
+  apksigner sign --ks "$KEYSTORE" --ks-pass env:KEYSTORE_PASS ${KEY_ALIAS:+--ks-key-alias "$KEY_ALIAS"} --out "$APK" "$OUT/aligned.apk"
 else
-  (cd "$TOOLCHAIN/signer" && node sign.mjs "$OUT/aligned.apk" "$APK" "$KEYSTORE" "$KEYSTORE_PASS")
+  (cd "$TOOLCHAIN/signer" && node sign.mjs "$OUT/aligned.apk" "$APK" "$KEYSTORE")
 fi
+# Print the signer certificate fingerprint so it can be compared with the previous release.
+unzip -p "$APK" 'META-INF/*.RSA' 2>/dev/null | openssl pkcs7 -inform DER -print_certs 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null | sed 's/^/    signer /' || true
 LD_LIBRARY_PATH="$(dirname "$ZIPALIGN")/lib64:${LD_LIBRARY_PATH:-}" "$ZIPALIGN" -c -p 4 "$APK" >/dev/null && echo "    alignment OK"
 "$AAPT2" dump badging "$APK" | head -2
 (cd "$DIST" && sha256sum ./*.apk > SHA256SUMS && grep "$(basename "$APK")" SHA256SUMS)

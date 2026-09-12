@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: 17 }
 
       - uses: android-actions/setup-android@v3
@@ -72,15 +72,20 @@ jobs:
           echo "AGI_RELEASE_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
           echo "Keystore decoded to a temporary file ($(stat -c %s "$KS") bytes)."
 
+      - name: Compile (debug + unit-test sources)
+        run: gradle --no-daemon --console=plain compileDebugKotlin compileDebugUnitTestKotlin
+
       - name: Run JVM test suites
         shell: bash
         run: |
           set -o pipefail
-          gradle --no-daemon --console=plain coreTests
+          gradle --no-daemon --console=plain coreTests 2>&1 | tee /tmp/coreTests.log | grep -E "passed|FAIL|BUILD|> Task :app:run|e: |What went wrong|Caused by|Exception" || true
+          grep -q "BUILD SUCCESSFUL" /tmp/coreTests.log || { echo "::error::coreTests failed – full log follows"; tail -80 /tmp/coreTests.log; exit 1; }
           python3 scripts/mock_ai_server.py 8089 /tmp/mock_ai_last.json & MOCK=$!
           sleep 1
-          gradle --no-daemon --console=plain providerWireTest -PmockUrl=http://127.0.0.1:8089 -PmockLog=/tmp/mock_ai_last.json
+          gradle --no-daemon --console=plain providerWireTest -PmockUrl=http://127.0.0.1:8089 -PmockLog=/tmp/mock_ai_last.json 2>&1 | tee /tmp/wire.log | grep -E "passed|FAIL|BUILD|What went wrong|Exception" || true
           kill $MOCK || true
+          grep -q "BUILD SUCCESSFUL" /tmp/wire.log || { echo "::error::providerWireTest failed – full log follows"; tail -80 /tmp/wire.log; exit 1; }
 
       - name: Lint (report only)
         run: gradle --no-daemon --console=plain lintRelease

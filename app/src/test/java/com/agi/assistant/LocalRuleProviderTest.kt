@@ -59,7 +59,7 @@ object LocalRuleProviderTest {
         expect("set a timer for 5 minutes", "alarm_timer" to mapOf("type" to "timer", "seconds" to 300))
         expect("what time is it", "device_info" to emptyMap())
         expect("open bbc.com", "open_url" to mapOf("url" to "bbc.com"))
-        expect("what's the weather in Dhaka", "web_search" to mapOf("query" to "weather in Dhaka"))
+        expect("what's the weather in Dhaka", "get_weather" to mapOf("city" to "Dhaka", "language" to "en"))  // information → direct source, never the browser
         expect("play lo-fi beats on youtube", "open_url" to mapOf("url" to "https://www.youtube.com/results?search_query=lo-fi+beats"))
         // Multi-step
         expect("Open Chrome, search for Bangladesh weather, and tell me what you find",

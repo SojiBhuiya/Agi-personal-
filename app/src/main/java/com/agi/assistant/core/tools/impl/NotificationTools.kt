@@ -12,6 +12,7 @@ class ReadNotificationsTool : Tool {
         "read_notifications",
         "Read the user's current notifications (app, title, text).",
         listOf(ToolParam("limit", ParamType.INTEGER, "Max notifications (default 10)", required = false)),
+        intent = ToolIntent.INFORMATION, rawOutput = true,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {

@@ -142,6 +142,7 @@ class FindContactTool : Tool {
         "find_contact",
         "Look up a contact's phone number(s) by name.",
         listOf(ToolParam("name", ParamType.STRING, "Partial or full contact name")),
+        intent = ToolIntent.INFORMATION,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {

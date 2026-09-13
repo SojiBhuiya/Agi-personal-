@@ -108,6 +108,7 @@ class OpenUrlTool : Tool {
         "open_url",
         "Open a website / URL in the browser (or the app that handles the link).",
         listOf(ToolParam("url", ParamType.STRING, "Full URL or domain, e.g. https://example.com or bbc.com")),
+        intent = ToolIntent.UI,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
@@ -128,11 +129,12 @@ class WebSearchTool : Tool {
     override val category = "Apps"
     override val spec = ToolSpec(
         "web_search",
-        "Search the web in the browser. Use read_screen afterwards to read the results if the user wants to know what was found.",
+        "Show a web search in the browser. Only when the user explicitly asks to search/Google/show something in the browser. Not for weather, time, battery or notifications – those have direct tools.",
         listOf(
             ToolParam("query", ParamType.STRING, "Search query"),
             ToolParam("engine", ParamType.STRING, "google (default), bing, duckduckgo or youtube", required = false, enumValues = listOf("google", "bing", "duckduckgo", "youtube")),
         ),
+        intent = ToolIntent.UI,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {

@@ -22,6 +22,7 @@ class GlobalActionTool : Tool {
         "global_action",
         "Perform a system navigation action: back, home, recents, notifications, quick_settings, lock, power_menu.",
         listOf(ToolParam("action", ParamType.STRING, "Action", enumValues = listOf("back", "home", "recents", "notifications", "quick_settings", "lock", "power_menu"))),
+        intent = ToolIntent.UI,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
@@ -48,6 +49,7 @@ class ScrollTool : Tool {
         "scroll",
         "Scroll the current screen.",
         listOf(ToolParam("direction", ParamType.STRING, "down, up, left, right", enumValues = listOf("down", "up", "left", "right")), ToolParam("times", ParamType.INTEGER, "How many times (default 1)", required = false)),
+        intent = ToolIntent.UI,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
@@ -65,6 +67,7 @@ class TapTextTool : Tool {
         "tap_text",
         "Tap a button/link/element on the current screen identified by its visible text or description. Use read_screen first if unsure what is on screen.",
         listOf(ToolParam("text", ParamType.STRING, "Visible text (partial match, case-insensitive)")),
+        intent = ToolIntent.UI,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
@@ -83,6 +86,7 @@ class TypeTextTool : Tool {
         "type_text",
         "Type text into the currently focused input field (or the first editable field on screen).",
         listOf(ToolParam("text", ParamType.STRING, "Text to type"), ToolParam("append", ParamType.BOOLEAN, "Append to existing text instead of replacing (default false)", required = false)),
+        intent = ToolIntent.UI,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
@@ -97,8 +101,9 @@ class ReadScreenTool : Tool {
     override val category = "Screen control"
     override val spec = ToolSpec(
         "read_screen",
-        "Read the text currently visible on the screen (from any app). Use it to check results after opening a page or to find button labels.",
+        "Read the text currently visible on the screen (from any app). Only when the user asks about the screen or after you opened a page they asked to see. Never use it to look up facts that get_weather or device_info can answer.",
         listOf(ToolParam("purpose", ParamType.STRING, "Why you are reading (ignored, for your own reasoning)", required = false)),
+        intent = ToolIntent.UI, rawOutput = true,
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
@@ -109,13 +114,13 @@ class ReadScreenTool : Tool {
         if (text.isBlank()) { delay(1500); text = svc.screenText() }
         val pkg = AssistantAccessibilityService.currentPackage
         return if (text.isBlank()) ToolResult.fail("The screen has no readable text right now${pkg?.let { " (app: $it)" } ?: ""}.")
-        else ToolResult.ok("Screen content${pkg?.let { " of $it" } ?: ""}:\n$text")
+        else ToolResult.ok("Screen content${pkg?.let { " of $it" } ?: ""}:\n$text", "Read the screen${pkg?.let { " of $it" } ?: ""}")
     }
 }
 
 class ScreenshotTool : Tool {
     override val category = "Screen control"
-    override val spec = ToolSpec("screenshot", "Take a screenshot and save it to Pictures/Screenshots.")
+    override val spec = ToolSpec("screenshot", "Take a screenshot and save it to Pictures/Screenshots.", intent = ToolIntent.UI)
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
         val svc = a11y() ?: return ToolResult.permission(needA11y)

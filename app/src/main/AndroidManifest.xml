@@ -4,6 +4,8 @@
 
     <!-- Network: only used to reach the AI provider the user configures. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Weather for "current location" (coarse is enough; requested only when the user asks for local weather) -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- Voice input -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>

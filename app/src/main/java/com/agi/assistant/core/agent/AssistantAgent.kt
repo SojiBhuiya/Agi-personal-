@@ -23,7 +23,8 @@ class AssistantAgent(
     private val tools: ToolRegistry,
     private val store: ConversationStore,
 ) {
-    private val loop = AgentLoop(maxSteps = 8) { Log.d(TAG, it) }
+    private val router = IntentRouter()
+    private val loop = AgentLoop(maxSteps = 8, log = { Log.d(TAG, it) }, router = router)
 
     val conversation: ConversationStore get() = store
 
@@ -40,14 +41,15 @@ class AssistantAgent(
             - For plain conversation or general questions, just answer; do not call tools you do not need.
             - For multi-step requests, call tools one after another and use the results of earlier tools.
             - After tools run, give a short, natural spoken-style summary of what happened or what you found.
-            - If information is on the screen (after opening a page), use read_screen to look at it before answering.
+            - Use read_screen only when the user asks about what is on the screen or after they asked you to open/show a page.
             - Never invent results; report tool errors honestly and suggest what the user can do.
             - Keep replies brief: 1-3 sentences unless the user asks for detail.
             - The user may speak Bangla or English; reply in the language they used.
 
             Available tools by category:
             $toolList
-        """.trimIndent()
+
+        """.trimIndent() + IntentRouter.policyPrompt(tools.specs)
     }
 
     suspend fun handle(userText: String, onEvent: suspend (AgentEvent) -> Unit) = withContext(Dispatchers.IO) {
@@ -59,12 +61,13 @@ class AssistantAgent(
         loop.run(
             provider = provider,
             fallback = fallback,
-            systemPrompt = systemPrompt(),
+            systemPrompt = systemPrompt(userText),
             toolSpecs = tools.specs,
             history = store,
             secrets = config.secrets,
             runTool = { call -> runTool(call, toolCtx) },
             onEvent = onEvent,
+            userText = userText,
         )
     }
 
@@ -82,9 +85,10 @@ class AssistantAgent(
      * Static prefix first, volatile date/time last: the long, unchanging part of the request stays
      * byte-identical across turns so the provider's implicit prefix caching can apply.
      */
-    private fun systemPrompt(): String {
+    private fun systemPrompt(userText: String): String {
         val now = SimpleDateFormat("EEEE, d MMMM yyyy HH:mm", Locale.getDefault()).format(Date())
-        return promptPrefix + "\n\nCurrent date/time: $now."
+        val hint = router.hintFor(userText, tools.specs)?.let { "\n$it" } ?: ""
+        return promptPrefix + hint + "\n\nCurrent date/time: $now."
     }
 
     companion object { private const val TAG = "AssistantAgent" }

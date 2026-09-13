@@ -3,12 +3,14 @@ package com.agi.assistant.core.agent
 import com.agi.assistant.core.ai.*
 import com.agi.assistant.core.tools.ToolResult
 import com.agi.assistant.core.tools.ToolSpec
+import com.agi.assistant.core.tools.ToolIntent
 
 /** UI-facing events emitted while a request is being processed. */
 sealed class AgentEvent {
     data class Thinking(val detail: String) : AgentEvent()
     data class ToolStarted(val name: String, val args: Map<String, Any?>) : AgentEvent()
-    data class ToolFinished(val name: String, val result: ToolResult) : AgentEvent()
+    /** [display] is what the UI may show: never the raw dump of a rawOutput tool (screen/notification lists). */
+    data class ToolFinished(val name: String, val result: ToolResult, val display: String = result.output) : AgentEvent()
     data class Reply(val text: String) : AgentEvent()
     data class NeedsPermission(val need: com.agi.assistant.core.tools.PermissionNeed) : AgentEvent()
     data class Error(val message: String) : AgentEvent()
@@ -33,8 +35,10 @@ data class TurnTrace(
     var toolMs: Long = 0,
     var fellBack: Boolean = false,
     var steps: Int = 0,
+    /** UI tool calls refused because the request was informational (see IntentRouter). */
+    var blockedCalls: Int = 0,
 ) {
-    override fun toString() = "steps=$steps provider=$providerCalls(${providerMs}ms) fallback=$fallbackCalls tools=$toolCalls(${toolMs}ms) fellBack=$fellBack"
+    override fun toString() = "steps=$steps provider=$providerCalls(${providerMs}ms) fallback=$fallbackCalls tools=$toolCalls(${toolMs}ms) blocked=$blockedCalls fellBack=$fellBack"
 }
 
 /**
@@ -66,7 +70,12 @@ object HistoryWindow {
 class AgentLoop(
     private val maxSteps: Int = 8,
     private val log: (String) -> Unit = {},
+    private val router: IntentRouter = IntentRouter(),
 ) {
+    /**
+     * @param userText the request being served (last user message); drives intent routing. When
+     *   null, routing guards are skipped (legacy callers/tests).
+     */
     suspend fun run(
         provider: AiProvider,
         fallback: AiProvider?,
@@ -76,9 +85,14 @@ class AgentLoop(
         secrets: List<String>,
         runTool: suspend (ToolCall) -> ToolResult,
         onEvent: suspend (AgentEvent) -> Unit,
+        userText: String? = null,
     ): TurnTrace {
         val trace = TurnTrace()
         var active = provider
+        val rawTools = toolSpecs.filter { it.rawOutput }.map { it.name }.toSet()
+        val route = userText?.let { router.route(it) }
+        val rawOutputsThisTurn = mutableListOf<Pair<String, ToolResult>>()   // (tool, result) for rawOutput tools
+        var directToolSucceeded = false
         try {
             while (trace.steps < maxSteps) {
                 trace.steps++
@@ -104,7 +118,7 @@ class AgentLoop(
                 }
 
                 if (!response.hasToolCalls) {
-                    val text = response.text?.trim().orEmpty().ifBlank { "Done." }
+                    val text = finalAnswer(response.text, rawOutputsThisTurn)
                     history.add(ChatMessage(Role.ASSISTANT, text))
                     onEvent(AgentEvent.Reply(text))
                     break
@@ -117,10 +131,24 @@ class AgentLoop(
                 for (call in response.toolCalls) {
                     onEvent(AgentEvent.ToolStarted(call.name, call.arguments))
                     val t1 = System.nanoTime()
-                    val result = runTool(call)
+                    val result = if (userText != null && route != null && !directToolSucceeded && router.isMisrouted(userText, call, toolSpecs)) {
+                        // Information/conversation request → UI tool (browser, read_screen) is a misroute: do not execute.
+                        trace.blockedCalls++
+                        log("blocked ${call.name} for ${route.intent} request (rule ${route.rule})")
+                        ToolResult.fail(
+                            "Not executed: '${call.name}' is a UI tool and this is an information request. " +
+                                (route.tool?.let { "Use $it instead" } ?: "Answer directly") +
+                                "; if the needed data is unavailable, tell the user and ask a clarifying question instead of opening a browser.",
+                        )
+                    } else runTool(call)
+                    if (result.success && toolSpecs.any { it.name == call.name && it.intent == ToolIntent.INFORMATION }) directToolSucceeded = true
                     trace.toolCalls++
                     trace.toolMs += (System.nanoTime() - t1) / 1_000_000
-                    onEvent(AgentEvent.ToolFinished(call.name, result))
+                    val display = if (call.name in rawTools && result.success) {
+                        rawOutputsThisTurn += call.name to result
+                        result.spoken ?: "Done."
+                    } else result.output
+                    onEvent(AgentEvent.ToolFinished(call.name, result, display))
                     history.add(ChatMessage(Role.TOOL, result.output, toolCallId = call.id, toolName = call.name))
                     if (result.needsPermission != null) {
                         onEvent(AgentEvent.NeedsPermission(result.needsPermission))
@@ -145,5 +173,21 @@ class AgentLoop(
         log("turn $trace")
         onEvent(AgentEvent.Done)
         return trace
+    }
+
+    /**
+     * Final-answer guard: a raw dump (screen tree, notification list) must never be the reply.
+     * If the provider echoed a rawOutput tool's output verbatim (or answered with nothing), replace
+     * it with the tool's spoken summary; otherwise keep the model's own wording.
+     */
+    internal fun finalAnswer(text: String?, raw: List<Pair<String, ToolResult>>): String {
+        var t = text?.trim().orEmpty()
+        for ((name, r) in raw) {
+            val dump = r.output.trim()
+            if (dump.length >= 40 && t.contains(dump)) {
+                t = t.replace(dump, r.spoken ?: "I looked at the ${name.replace('_', ' ')} result.").trim()
+            }
+        }
+        return t.ifBlank { raw.lastOrNull()?.second?.spoken ?: "Done." }
     }
 }

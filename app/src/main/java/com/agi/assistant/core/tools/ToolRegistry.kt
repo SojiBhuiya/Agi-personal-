@@ -34,6 +34,8 @@ class ToolRegistry private constructor(private val tools: Map<String, Tool>) {
                 BrightnessTool(),
                 DeviceInfoTool(),
                 AlarmTimerTool(),
+                // Information (direct data sources – never the browser)
+                WeatherTool(),
                 // Files
                 FindFilesTool(),
                 // Notifications

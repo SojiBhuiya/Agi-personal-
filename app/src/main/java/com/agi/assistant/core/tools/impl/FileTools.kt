@@ -25,6 +25,7 @@ class FindFilesTool : Tool {
             ToolParam("downloads_only", ParamType.BOOLEAN, "Only look in the Downloads folder", required = false),
             ToolParam("open", ParamType.BOOLEAN, "Open the newest match (default true when exactly one match)", required = false),
         ),
+        intent = ToolIntent.INFORMATION, rawOutput = true,
     )
 
     private data class Hit(val name: String, val uri: Uri, val mime: String?, val modified: Long, val size: Long)

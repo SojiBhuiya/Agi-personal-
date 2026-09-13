@@ -97,6 +97,30 @@ class LocalRuleProvider : AiProvider {
             }
         }
 
+        // Intent routing (see core/agent/IntentRouter): information requests go to direct data tools
+        // (weather -> get_weather, battery/time -> device_info, notifications -> read_notifications);
+        // an explicit "search/গুগলে … সার্চ" is a UI request and stays with web_search below.
+        val route = com.agi.assistant.core.agent.IntentRouter().route(step)
+        if (route.intent == com.agi.assistant.core.agent.RequestIntent.INFORMATION &&
+            route.tool in setOf("get_weather", "device_info", "read_notifications") && !lower.contains("screen")) {
+            return call(route.tool!!, route.args)
+        }
+        // Bangla UI/ACTION verbs that the English regexes below do not cover.
+        if (route.rule == "ui.search") {
+            val q = step.replace(Regex("(?iu)(google-?এ|গুগলে|গুগল করে|গুগল|google|সার্চ করে|সার্চ করো|সার্চ|search করো|search|করে দেখাও|দেখাও|করো|for)"), " ").replace(Regex("\\s+"), " ").trim()
+            if (q.isNotEmpty()) return call("web_search", mapOf("query" to q))
+        }
+        if (route.rule == "action.play_youtube" && !lower.contains("play ")) {
+            val q = step.replace(Regex("(?iu)(youtube-?এ|youtube-?তে|ইউটিউবে|ইউটিউব|youtube|on|এর গান|গান|চালাও|বাজাও|play)"), " ").replace(Regex("\\s+"), " ").trim()
+            if (q.isNotEmpty()) return call("open_url", mapOf("url" to "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(q, "UTF-8")))
+        }
+        if (route.rule == "action.open_app") {
+            Regex("(?u)^(.+?)\\s+(খুলে দাও|খুলে দিন|খুলে|খোলো|খুলো|চালু করো|ওপেন করো|ওপেন)").find(step)?.let { m ->
+                val app = m.groupValues[1].trim().let { if (it.equals("ক্রোম", true)) "Chrome" else it }
+                return call("open_app", mapOf("app" to app))
+            }
+        }
+
         // Volume – English + Bangla, Bengali numerals, absolute vs relative (see core/tools/VolumeLogic.kt)
         com.agi.assistant.core.tools.VolumeCommand.parse(step)?.let { return call("volume", it.toToolArgs()) }
 
@@ -137,10 +161,6 @@ class LocalRuleProvider : AiProvider {
         }
         Regex("open (chrome|browser|google) and (?:search|look) (?:for )?(.+)").find(lower)?.let { m ->
             return call("web_search", mapOf("query" to step.substring(m.groups[2]!!.range)))
-        }
-        if (lower.contains("weather")) {
-            val q = step.replace(Regex("(?i)^(what'?s|what is|tell me|show me|check)( the)? "), "")
-            return call("web_search", mapOf("query" to q))
         }
 
         // Calls
@@ -238,16 +258,37 @@ class LocalRuleProvider : AiProvider {
 
     private fun summariseToolResults(messages: List<ChatMessage>): AiResponse {
         val results = messages.takeLastWhile { it.role == Role.TOOL }
-        val text = results.joinToString("\n") { it.content }.trim()
+        // Tools that return a dump (screen tree, notification list, file list) also carry a
+        // "Suggested reply:"/spoken line; never echo the raw dump as the answer.
+        val text = results.joinToString("\n") { m ->
+            val c = m.content.trim()
+            val suggested = Regex("(?s)Suggested reply:\\s*(.+)$").find(c)?.groupValues?.get(1)?.trim()
+            when {
+                suggested != null -> suggested
+                m.toolName == "read_screen" -> screenGist(c)
+                m.toolName in RAW_TOOLS -> c.lineSequence().firstOrNull().orEmpty().take(200)
+                else -> c
+            }
+        }.trim()
         return reply(text.ifBlank { "Done." })
     }
 
     private fun reply(text: String) = AiResponse(text, emptyList(), id)
 
+    /** Readable text lines of a screen dump only – no [button]/[input] widgets, no tree, short. */
+    private fun screenGist(dump: String): String {
+        val lines = dump.lineSequence().drop(1).map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("[", ignoreCase = true) }
+            .filter { it.length > 2 }.take(6).toList()
+        if (lines.isEmpty()) return "I looked at the screen but found no readable text."
+        return "On the screen I can see: " + lines.joinToString("; ").take(300) + "."
+    }
+
     private fun call(name: String, args: Map<String, Any?>) =
         ToolCall("call_${UUID.randomUUID().toString().take(8)}", name, args.filterValues { it != null })
 
     companion object {
+        private val RAW_TOOLS = setOf("read_screen", "read_notifications", "find_files")
         private val REPORT_RE = Regex("^(and )?(tell me|let me know|report|summari[sz]e|read( it)? out|say)( me)? (what|the result|what you (find|see|found)|it)?.*")
     }
 }

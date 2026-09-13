@@ -45,7 +45,7 @@ object RequestFlowTest {
         history.add(ChatMessage(Role.USER, user))
         val events = ArrayList<AgentEvent>()
         val toolInvocations = ArrayList<String>()
-        val trace = AgentLoop(8).run(provider, fallback, "sys", specs, history, listOf("secret-key-value"), { c -> toolInvocations += c.name; tool(c) }) { events += it }
+        val trace = AgentLoop(8).run(provider, fallback, "sys", specs, history, listOf("secret-key-value"), { c -> toolInvocations += c.name; tool(c) }, { events += it }, userText = user)
         return Triple(trace, events, history)
     }
 

@@ -119,7 +119,7 @@ class BrightnessTool : Tool {
 
 class DeviceInfoTool : Tool {
     override val category = "Device"
-    override val spec = ToolSpec("device_info", "Get current time, date, battery level and device model.")
+    override val spec = ToolSpec("device_info", "Get current time, date, battery level and device model. Use this for any time/date/battery question.", intent = ToolIntent.INFORMATION)
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
         val bm = ctx.context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager

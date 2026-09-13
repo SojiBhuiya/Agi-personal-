@@ -273,7 +273,7 @@ class MainActivity : Activity(), VoiceInput.Listener {
                 adapter.notifyDataSetChanged()
             }
             is AgentEvent.ToolFinished -> {
-                adapter.insertBefore(thinking, ChatItem.tool(event.name, event.result.output, event.result.success))
+                adapter.insertBefore(thinking, ChatItem.tool(event.name, event.display, event.result.success))
             }
             is AgentEvent.Reply -> {
                 adapter.insertBefore(thinking, ChatItem.assistant(event.text))

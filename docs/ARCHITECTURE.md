@@ -133,3 +133,32 @@ VolumeTool (DeviceTools.kt) → VolumeController → AndroidVolumeBackend → Au
 * `TurnTrace` (numbers only, debug log) records provider/tool counts and milliseconds per turn.
 * Follow-up (not in this task): token streaming would need a streaming transport, incremental `AgentEvent`s and a
   partial-message chat row; the current architecture consumes whole turns.
+
+## Intent-aware tool routing
+
+Problem this solves: "আজ আবহাওয়া কেমন?" used to open Chrome (`web_search`) and then `read_screen`,
+because there was no weather tool, the offline planner mapped *weather* to the browser, the
+`read_screen` description invited the model to "check results after opening a page", and the
+raw tool output was rendered verbatim in chat. The browser is a **UI** tool, not an information source.
+
+Pieces (all small, declarative – no central if/else):
+
+- `core/tools/ToolSpec.kt` – every tool declares `intent` (`INFORMATION`, `ACTION`, `UI`) and
+  `rawOutput` (dumps such as screen trees / notification lists that must never be shown verbatim).
+- `core/tools/WeatherLogic.kt` + `tools/impl/WeatherTool.kt` – `get_weather` (INFORMATION):
+  Open-Meteo (HTTPS, keyless). No `city` → device last-known location (`ACCESS_COARSE_LOCATION`,
+  requested through the normal RUNTIME permission flow); unavailable → "ask for a city", never Chrome.
+- `core/agent/IntentRouter.kt` – ordered `IntentRule` list (EN + BN keywords) → `Route(intent, tool, args)`.
+  Used three ways: (1) `policyPrompt` (static, generated from declared intents, part of the cached prompt
+  prefix), (2) `hintFor` (one line per request, appended after the prefix, before the date), (3) the
+  offline planner (`LocalRuleProvider`) picks the direct tool from the same rules.
+- `core/agent/AgentLoop.kt` – if the request is informational and the model still asks for a UI tool,
+  the call is **not executed**; the model gets a tool error telling it to use the direct tool or ask the
+  user (`TurnTrace.blockedCalls`). After a direct INFORMATION tool succeeded the guard is lifted.
+  `finalAnswer()` replaces a verbatim echo of a rawOutput dump with the tool's spoken summary;
+  `AgentEvent.ToolFinished.display` is what the UI shows (`spoken` for rawOutput tools).
+- Latency: still one provider request per step; a routed information request is exactly
+  provider → tool → provider (2 calls) instead of 3–4 with the browser detour. "Hi" remains 1 call / 0 tools.
+
+Tests: `IntentRoutingTest` (79 checks) – covers the 12 required scenarios plus WeatherLogic fixtures.
+Not verified in the sandbox: live Open-Meteo requests and real device location (no network / device).

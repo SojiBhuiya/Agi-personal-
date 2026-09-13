@@ -134,7 +134,8 @@ jobs:
           # apksigner prints one line per scheme, e.g.
           #   "Signer #1 certificate SHA-256 digest: <hex>"  or  "V3.0 Signer: certificate SHA-256 digest: <hex>"
           # Match any of them on the "certificate SHA-256 digest:" marker and take the 64-hex digest.
-          DIGESTS=$(grep -i "certificate SHA-256 digest:" /tmp/verify.txt | grep -oiE '[0-9a-f]{64}' | tr 'a-f' 'A-F' | sort -u)
+          DIGESTS=$(grep -i "certificate SHA-256 digest:" /tmp/verify.txt | grep -oiE '[0-9a-f]{64}' | tr 'a-f' 'A-F' | sort -u || true)
+          [ -n "$DIGESTS" ] || fail "apksigner printed no 'certificate SHA-256 digest:' line – cannot verify signer"
           RAW=$(echo "$DIGESTS" | head -1)
           ACTUAL=$(echo "$RAW" | sed 's/../&:/g; s/:$//')
           EXPECTED=$(echo "$EXPECTED_CERT_SHA256" | tr 'a-f' 'A-F')

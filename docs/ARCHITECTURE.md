@@ -97,3 +97,20 @@ VolumeTool (DeviceTools.kt) → VolumeController → AndroidVolumeBackend → Au
 * Bengali numerals ০–৯ are normalised by `BanglaDigits.toAscii` before parsing.
 * `mute`, `unmute`, `max`, `get` and the `ring/alarm/call/notification` streams are preserved.
 * JVM tests: `VolumeControlTest` (parser EN+BN, `VolumeMath`, controller against a fake backend).
+
+## Online AI brain (provider layer)
+
+`SecureSettings` (API key AES-GCM encrypted with an Android Keystore key) → `ProviderConfig` → `AiProviderFactory` →
+`OpenAiCompatibleProvider` / `GeminiProvider` / `LocalRuleProvider` → `AssistantAgent` loop.
+
+* `OpenAiCompatibleProvider` posts to `OpenAiEndpoint.chatCompletions(baseUrl)` (= configured Base URL + `/chat/completions`,
+  never auto-adds `/v1`) with the configured model, `stream: false`, the system prompt, the full conversation window and the
+  tool schemas. Tool calls returned by the model are executed by the same agent loop the offline planner uses.
+* Streaming is intentionally not used: the agent consumes whole turns (text and/or tool calls); there is no token-level UI path.
+* `HttpJson` / `HttpTransport` is the single network seam. Every failure becomes an `AiProviderException` with a
+  `ProviderErrorKind` (CONFIG, AUTH 401/403, NOT_FOUND 404, BAD_REQUEST 400, RATE_LIMIT 429, SERVER 5xx, TIMEOUT, NETWORK,
+  MALFORMED, EMPTY). `AssistantAgent` falls back to `LocalRuleProvider` on any of them when "fallback to offline" is on.
+* `Redactor` strips API keys (exact value, `Bearer …`, `?key=…`, key-looking tokens) from every message that reaches logs or
+  the UI. Gemini's key is sent in the `x-goog-api-key` header, not the URL.
+* Settings → Test connection runs `ConnectionTester`, a real request through the same factory/provider classes.
+* JVM tests: `OnlineProviderTest` (fake transport, deterministic) and `ProviderWireTest` (real HTTP against `scripts/mock_ai_server.py`).

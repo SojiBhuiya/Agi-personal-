@@ -2,33 +2,75 @@ package com.agi.assistant.core.ai
 
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Minimal JSON-over-HTTP helper built on HttpURLConnection (no third party HTTP stack). */
-object HttpJson {
-    fun post(url: String, body: JSONObject, headers: Map<String, String>, timeoutMs: Int): JSONObject {
+/** Raw HTTP result; [body] is decoded as UTF-8 so Bangla/English text survives unchanged. */
+data class HttpResponse(val code: Int, val body: String)
+
+/**
+ * The only seam between providers and the network. Production uses [UrlConnectionTransport];
+ * tests plug in a fake so request construction, parsing and every failure mode are deterministic.
+ */
+interface HttpTransport {
+    fun post(url: String, body: String, headers: Map<String, String>, timeoutMs: Int): HttpResponse
+}
+
+/** HttpURLConnection-based transport (no third-party HTTP stack). */
+object UrlConnectionTransport : HttpTransport {
+    override fun post(url: String, body: String, headers: Map<String, String>, timeoutMs: Int): HttpResponse {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
             doOutput = true
-            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "application/json")
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
         }
         try {
-            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
-            if (code !in 200..299) {
-                val detail = runCatching { JSONObject(text).optJSONObject("error")?.optString("message") }.getOrNull()
-                throw AiProviderException("HTTP $code from provider: ${detail ?: text.take(300)}")
-            }
-            return JSONObject(text)
+            val text = stream?.let { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use(BufferedReader::readText) }.orEmpty()
+            return HttpResponse(code, text)
         } finally {
             conn.disconnect()
+        }
+    }
+}
+
+/**
+ * JSON-over-HTTP helper shared by the remote providers. Every failure (transport, HTTP status,
+ * malformed JSON) is turned into an [AiProviderException] with a classified [ProviderErrorKind]
+ * and a message that never contains the API key.
+ */
+object HttpJson {
+    fun post(
+        url: String,
+        body: JSONObject,
+        headers: Map<String, String>,
+        timeoutMs: Int,
+        secrets: List<String> = emptyList(),
+        transport: HttpTransport = UrlConnectionTransport,
+    ): JSONObject {
+        val resp = try {
+            transport.post(url, body.toString(), headers, timeoutMs)
+        } catch (e: AiProviderException) {
+            throw e
+        } catch (e: Exception) {
+            throw ProviderErrors.fromTransport(e, secrets)
+        }
+        if (resp.code !in 200..299) throw ProviderErrors.fromHttpStatus(resp.code, resp.body, secrets)
+        if (resp.body.isBlank()) throw AiProviderException("Provider returned an empty response.", kind = ProviderErrorKind.EMPTY)
+        return try {
+            JSONObject(resp.body)
+        } catch (e: Exception) {
+            throw AiProviderException(
+                "Provider returned invalid JSON: ${Redactor.redact(resp.body.take(120), secrets)}",
+                e, ProviderErrorKind.MALFORMED,
+            )
         }
     }
 }

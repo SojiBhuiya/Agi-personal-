@@ -6,7 +6,6 @@ import android.widget.*
 import com.agi.assistant.AssistantApp
 import com.agi.assistant.R
 import com.agi.assistant.core.ai.*
-import com.agi.assistant.core.tools.ToolSpec
 import com.agi.assistant.core.update.UpdateError
 import com.agi.assistant.core.update.InstallError
 import com.agi.assistant.core.update.UpdateManager
@@ -190,17 +189,12 @@ class SettingsActivity : Activity() {
     private fun test() {
         val c = currentConfig()
         if (c.type == ProviderType.LOCAL) { testResult.text = "Offline planner needs no connection."; return }
-        if (c.type != ProviderType.LOCAL && c.baseUrl.isBlank()) { testResult.text = "Base URL is required."; return }
+        c.validationError()?.let { testResult.text = "✗ $it"; return }
         testResult.text = "Testing…"
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val provider = AiProviderFactory.create(c)
-                    val r = provider.complete(AiRequest("Reply with the single word OK.", listOf(ChatMessage(Role.USER, "ping")), emptyList<ToolSpec>()))
-                    "✓ ${provider.displayName} responded: ${(r.text ?: "(tool call)").take(80)}"
-                }.getOrElse { "✗ ${it.message}" }
-            }
-            withContext(MainDispatcher) { testResult.text = result }
+            // Real request through the same provider class and settings the agent loop uses.
+            val result = withContext(Dispatchers.IO) { ConnectionTester.test(c) }
+            withContext(MainDispatcher) { testResult.text = result.message }
         }
     }
 }

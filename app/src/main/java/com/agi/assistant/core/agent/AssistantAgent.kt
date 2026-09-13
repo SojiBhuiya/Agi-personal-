@@ -53,13 +53,15 @@ class AssistantAgent(
                 val response = try {
                     provider.complete(AiRequest(systemPrompt(), store.window(), tools.specs))
                 } catch (e: Exception) {
-                    Log.w(TAG, "Provider ${provider.id} failed", e)
+                    // Never log the raw exception: a message could echo request details. Redact first.
+                    val reason = ProviderErrors.describe(e, config.secrets)
+                    Log.w(TAG, "Provider ${provider.id} failed: $reason")
                     if (provider.isRemote && settings.fallbackToLocal) {
-                        onEvent(AgentEvent.Error("${provider.displayName} failed (${e.message?.take(120)}). Falling back to offline planner."))
+                        onEvent(AgentEvent.Error("${provider.displayName} failed (${reason.take(160)}). Falling back to offline planner."))
                         provider = AiProviderFactory.fallback
                         continue
                     }
-                    throw e
+                    throw AiProviderException(reason, null, (e as? AiProviderException)?.kind ?: ProviderErrorKind.UNKNOWN)
                 }
 
                 if (!response.hasToolCalls) {
@@ -92,8 +94,9 @@ class AssistantAgent(
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Agent error", e)
-            val msg = "Something went wrong: ${e.message ?: e.javaClass.simpleName}"
+            val safe = Redactor.redact(e.message ?: e.javaClass.simpleName, config.secrets)
+            Log.e(TAG, "Agent error: $safe")
+            val msg = "Something went wrong: $safe"
             store.add(ChatMessage(Role.ASSISTANT, msg))
             onEvent(AgentEvent.Error(msg))
         }

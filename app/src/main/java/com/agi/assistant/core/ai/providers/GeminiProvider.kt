@@ -60,10 +60,12 @@ class GeminiProvider(private val config: ProviderConfig) : AiProvider {
             }
         }
 
-        val url = config.baseUrl.trimEnd('/') + "/v1beta/models/${config.model}:generateContent?key=${config.apiKey}"
-        val json = HttpJson.post(url, body, emptyMap(), config.timeoutMs)
+        config.validationError()?.let { throw AiProviderException(it, kind = ProviderErrorKind.CONFIG) }
+        // Key goes in a header (not the query string) so it can never leak through URL logging.
+        val url = config.baseUrl.trimEnd('/') + "/v1beta/models/${config.model}:generateContent"
+        val json = HttpJson.post(url, body, mapOf("x-goog-api-key" to config.apiKey), config.timeoutMs, config.secrets)
         val candidate = json.optJSONArray("candidates")?.optJSONObject(0)
-            ?: throw AiProviderException("Gemini returned no candidates: ${json.toString().take(200)}")
+            ?: throw AiProviderException("Gemini returned no candidates: ${Redactor.redact(json.toString().take(120), config.secrets)}", kind = ProviderErrorKind.MALFORMED)
         val parts = candidate.optJSONObject("content")?.optJSONArray("parts") ?: JSONArray()
         val text = StringBuilder()
         val calls = mutableListOf<ToolCall>()

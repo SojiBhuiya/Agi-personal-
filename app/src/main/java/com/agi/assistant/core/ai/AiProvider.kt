@@ -20,7 +20,16 @@ data class AiResponse(
     val hasToolCalls get() = toolCalls.isNotEmpty()
 }
 
-class AiProviderException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/**
+ * Any provider failure. [kind] lets the agent/UI show a helpful, non-technical message; the
+ * [message] is already redacted (never contains an API key).
+ */
+class AiProviderException(
+    message: String,
+    cause: Throwable? = null,
+    val kind: ProviderErrorKind = ProviderErrorKind.UNKNOWN,
+    val httpStatus: Int? = null,
+) : Exception(message, cause)
 
 /**
  * Provider-independent contract. Implementations exist for the offline

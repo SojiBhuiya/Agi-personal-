@@ -55,7 +55,7 @@ object ProviderWireTest {
         val g1 = gm.complete(AiRequest("sys", listOf(ChatMessage(Role.USER, "open youtube")), tools))
         check("gemini: parses functionCall", g1.hasToolCalls && g1.toolCalls[0].name == "open_app" && g1.toolCalls[0].arguments["app"] == "YouTube", g1.toString())
         sent = JSONObject(logFile.readText())
-        check("gemini: key in query", sent.getString("path").contains("key=gkey") && sent.getString("path").contains("gemini-test:generateContent"))
+        check("gemini: key in header, not URL", sent.getJSONObject("headers").optString("x-goog-api-key") == "gkey" && !sent.getString("path").contains("gkey") && sent.getString("path").contains("gemini-test:generateContent"))
         check("gemini: function_declarations", sent.getJSONObject("body").getJSONArray("tools").getJSONObject(0).getJSONArray("function_declarations").length() == 2)
         check("gemini: system_instruction", sent.getJSONObject("body").has("system_instruction"))
         val g2 = gm.complete(AiRequest("sys", listOf(
@@ -71,7 +71,8 @@ object ProviderWireTest {
         // ---- Error surface
         val bad = OpenAiCompatibleProvider(ProviderConfig(ProviderType.OPENAI_COMPATIBLE, "$base/bad", "m", ""))
         val err = runCatching { bad.complete(AiRequest("s", listOf(ChatMessage(Role.USER, "x")), emptyList())) }.exceptionOrNull()
-        check("error: HTTP 401 becomes AiProviderException with message", err is AiProviderException && err.message!!.contains("401") && err.message!!.contains("Invalid API key"), err.toString())
+        check("error: HTTP 401 becomes AiProviderException with message", err is AiProviderException && err.message!!.contains("401") && err.message!!.contains("Invalid API key") && err.kind == ProviderErrorKind.AUTH, err.toString())
+        check("openai: stream=false requested", JSONObject(logFile.readText()).getJSONObject("body").optBoolean("stream", true) == false)
 
         println(if (fails == 0) "\nall provider wire tests passed" else "\n$fails failed")
         if (fails > 0) System.exit(1)

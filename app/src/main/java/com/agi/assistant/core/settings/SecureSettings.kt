@@ -6,6 +6,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.agi.assistant.core.ai.ProviderConfig
+import com.agi.assistant.core.ai.ProviderSettingsStore
 import com.agi.assistant.core.ai.ProviderType
 import com.agi.assistant.core.update.UpdatePreferences
 import java.security.KeyStore
@@ -19,28 +20,33 @@ import javax.crypto.spec.GCMParameterSpec
  * key that lives in the Android Keystore, so they never exist in plain text
  * on disk and are never compiled into the APK.
  */
-class SecureSettings(context: Context) : UpdatePreferences {
+class SecureSettings(context: Context) : UpdatePreferences, ProviderSettingsStore {
     private val prefs: SharedPreferences = context.getSharedPreferences("assistant_settings", Context.MODE_PRIVATE)
 
     // ---- Provider -----------------------------------------------------------
-    var providerType: ProviderType
+    override var providerType: ProviderType
         get() = runCatching { ProviderType.valueOf(prefs.getString(KEY_PROVIDER, ProviderType.LOCAL.name)!!) }.getOrDefault(ProviderType.LOCAL)
         set(v) = prefs.edit().putString(KEY_PROVIDER, v.name).apply()
 
-    var baseUrl: String
+    override var baseUrl: String
         get() = prefs.getString(KEY_BASE_URL, "") ?: ""
         set(v) = prefs.edit().putString(KEY_BASE_URL, v.trim()).apply()
 
-    var model: String
+    override var model: String
         get() = prefs.getString(KEY_MODEL, "") ?: ""
         set(v) = prefs.edit().putString(KEY_MODEL, v.trim()).apply()
 
-    var apiKey: String
+    override var apiKey: String
         get() = prefs.getString(KEY_API_KEY, null)?.let { decrypt(it) } ?: ""
         set(v) {
             if (v.isBlank()) prefs.edit().remove(KEY_API_KEY).apply()
             else prefs.edit().putString(KEY_API_KEY, encrypt(v.trim())).apply()
         }
+
+    /** Local display label for the configured API ("My Gemini"). Never sent to any provider. */
+    override var apiName: String
+        get() = prefs.getString(KEY_API_NAME, "") ?: ""
+        set(v) = prefs.edit().putString(KEY_API_NAME, v.trim()).apply()
 
     var fallbackToLocal: Boolean
         get() = prefs.getBoolean(KEY_FALLBACK, true)
@@ -124,6 +130,7 @@ class SecureSettings(context: Context) : UpdatePreferences {
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_MODEL = "model"
         private const val KEY_API_KEY = "api_key_enc"
+        private const val KEY_API_NAME = "api_name"
         private const val KEY_FALLBACK = "fallback_local"
         private const val KEY_TTS = "speak_replies"
         private const val KEY_CONFIRM = "confirm_sensitive"

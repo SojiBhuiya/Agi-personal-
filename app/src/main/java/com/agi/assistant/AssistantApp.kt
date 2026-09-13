@@ -37,6 +37,8 @@ class AssistantApp : Application() {
         super.onCreate()
         instance = this
         settings = SecureSettings(this)
+        // Safe, idempotent: only fixes an invalid stored Gemini model (e.g. bare "gemini"); custom models untouched.
+        runCatching { com.agi.assistant.core.ai.SimpleSetup.migrate(settings) }
         permissions = PermissionManager(this)
         tools = ToolRegistry.default(this)
         conversation = ConversationStore(this)

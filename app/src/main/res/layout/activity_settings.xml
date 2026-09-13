@@ -10,24 +10,36 @@
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="4dp" android:text="Keys are encrypted with the Android Keystore and stored only on this phone. Nothing is hard-coded in the app."/>
 
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp" android:layout_marginTop="14dp" android:background="@drawable/bg_card">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:text="Preset"/>
-            <Spinner android:id="@+id/preset" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:popupBackground="@color/surface_2"/>
+            <!-- Simple setup: provider choice + optional local label + key. Technical fields live under Advanced. -->
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:text="AI Provider"/>
+            <Spinner android:id="@+id/simpleProvider" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:popupBackground="@color/surface_2"/>
 
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="Provider type"/>
-            <Spinner android:id="@+id/providerType" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:popupBackground="@color/surface_2"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="API Name (optional)"/>
+            <EditText android:id="@+id/apiName" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:inputType="textCapWords" android:textSize="14sp" android:textColor="@color/text" android:hint="My Gemini"/>
 
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="Base URL"/>
-            <EditText android:id="@+id/baseUrl" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:inputType="textUri" android:textSize="14sp" android:textColor="@color/text" android:hint="https://api.groq.com/openai/v1"/>
-
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="Model"/>
-            <EditText android:id="@+id/model" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:inputType="text" android:textSize="14sp" android:textColor="@color/text" android:hint="llama-3.3-70b-versatile"/>
-
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="API key"/>
+            <TextView android:id="@+id/apiKeyLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="API Key"/>
             <EditText android:id="@+id/apiKey" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:inputType="textPassword" android:textSize="14sp" android:textColor="@color/text" android:hint="Paste key (stored encrypted)"/>
             <TextView android:id="@+id/presetNote" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="8dp"/>
 
-            <Button android:id="@+id/btnTest" android:layout_width="wrap_content" android:layout_height="44dp" android:layout_marginTop="14dp" style="@style/Button.Ghost" android:text="Test connection"/>
+            <Button android:id="@+id/btnTest" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="14dp" style="@style/Button.Primary" android:text="Test &amp; Save"/>
             <TextView android:id="@+id/testResult" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="6dp"/>
+
+            <TextView android:id="@+id/advancedToggle" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="12dp" android:gravity="center_vertical" android:textSize="14sp" android:textColor="@color/text" android:text="Advanced settings  ▸"/>
+            <LinearLayout android:id="@+id/advancedPanel" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:text="For custom or OpenAI-compatible APIs (OpenAI, Groq, OpenRouter, Ollama…). Google Gemini needs none of this."/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="10dp" android:text="Preset"/>
+                <Spinner android:id="@+id/preset" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:popupBackground="@color/surface_2"/>
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="Provider type"/>
+                <Spinner android:id="@+id/providerType" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:popupBackground="@color/surface_2"/>
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="Base URL"/>
+                <EditText android:id="@+id/baseUrl" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:inputType="textUri" android:textSize="14sp" android:textColor="@color/text" android:hint="https://api.groq.com/openai/v1"/>
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="14dp" android:text="Model"/>
+                <EditText android:id="@+id/model" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:paddingStart="16dp" android:paddingEnd="16dp" android:inputType="text" android:textSize="14sp" android:textColor="@color/text" android:hint="llama-3.3-70b-versatile"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:layout_marginTop="8dp" android:text="Uses the API key above. Test &amp; Save checks these values with a real request before saving."/>
+            </LinearLayout>
         </LinearLayout>
 
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Title" android:layout_marginTop="24dp" android:text="Behaviour"/>

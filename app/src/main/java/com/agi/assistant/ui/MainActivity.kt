@@ -171,8 +171,8 @@ class MainActivity : Activity(), VoiceInput.Listener {
         val s = app.settings
         statusText.text = when (s.providerType) {
             ProviderType.LOCAL -> "Offline planner • no API key"
-            ProviderType.OPENAI_COMPATIBLE -> "API • ${s.model.ifBlank { "model not set" }}"
-            ProviderType.GEMINI -> "Gemini • ${s.model.ifBlank { "model not set" }}"
+            ProviderType.OPENAI_COMPATIBLE -> "${s.apiName.ifBlank { "API" }} • ${s.model.ifBlank { "model not set" }}"
+            ProviderType.GEMINI -> "${s.apiName.ifBlank { "Gemini" }} • ${s.model.ifBlank { "model not set" }}"
         }
         if (pendingNeed == null) {
             val upd = updateAvailable

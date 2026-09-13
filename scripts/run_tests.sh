@@ -15,6 +15,7 @@ OUT="$ROOT/app/build-offline/test-classes"; rm -rf "$OUT"; mkdir -p "$OUT"
 # org.json is a real implementation on the JVM (android.jar only has stubs).
 CP="$OUT:$KLIB/kotlin-stdlib.jar:$KLIB/kotlinx-coroutines-core-jvm.jar:$TOOLCHAIN/json.jar"
 echo "== LocalRuleProviderTest"; java -cp "$CP" com.agi.assistant.LocalRuleProviderTest
+echo "== SimpleSetupTest"; java -cp "$CP" com.agi.assistant.SimpleSetupTest
 echo "== OnlineProviderTest"; java -cp "$CP" com.agi.assistant.OnlineProviderTest
 echo "== VolumeControlTest"; java -cp "$CP" com.agi.assistant.VolumeControlTest
 echo "== AgentLoopTest"; java -cp "$CP" com.agi.assistant.AgentLoopTest

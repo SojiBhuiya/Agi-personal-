@@ -6,9 +6,12 @@ import org.json.JSONObject
 import java.util.UUID
 
 /** Google Gemini `generateContent` API with function calling. */
-class GeminiProvider(private val config: ProviderConfig) : AiProvider {
+class GeminiProvider(
+    private val config: ProviderConfig,
+    private val transport: HttpTransport = UrlConnectionTransport,
+) : AiProvider {
     override val id = "gemini"
-    override val displayName = "Gemini (${config.model})"
+    override val displayName = "Gemini (${GeminiModels.normalize(config.model)})"
     override val isRemote = true
 
     /** `{baseUrl}/v1beta/models/{model}:generateContent` with the model id normalised (no `models/` prefix). */
@@ -66,7 +69,7 @@ class GeminiProvider(private val config: ProviderConfig) : AiProvider {
         config.validationError()?.let { throw AiProviderException(it, kind = ProviderErrorKind.CONFIG) }
         // Key goes in a header (not the query string) so it can never leak through URL logging.
         val url = endpoint
-        val json = HttpJson.post(url, body, mapOf("x-goog-api-key" to config.apiKey), config.timeoutMs, config.secrets)
+        val json = HttpJson.post(url, body, headers(), config.timeoutMs, config.secrets, transport)
         val candidate = json.optJSONArray("candidates")?.optJSONObject(0)
             ?: throw AiProviderException("Gemini returned no candidates: ${Redactor.redact(json.toString().take(120), config.secrets)}", kind = ProviderErrorKind.MALFORMED)
         val parts = candidate.optJSONObject("content")?.optJSONArray("parts") ?: JSONArray()
@@ -81,6 +84,9 @@ class GeminiProvider(private val config: ProviderConfig) : AiProvider {
         }
         return AiResponse(text.toString().ifBlank { null }, calls, id, config.model)
     }
+
+    /** Only the key header; no user-facing label or other local setting ever goes on the wire. */
+    fun headers(): Map<String, String> = mapOf("x-goog-api-key" to config.apiKey)
 
     private fun part(role: String, text: String) =
         JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", text)))

@@ -1,6 +1,7 @@
 package com.agi.assistant
 
 import com.agi.assistant.core.ai.*
+import com.agi.assistant.core.ai.providers.GeminiProvider
 import com.agi.assistant.core.ai.providers.LocalRuleProvider
 import com.agi.assistant.core.ai.providers.OpenAiCompatibleProvider
 import com.agi.assistant.core.tools.ParamType
@@ -152,6 +153,31 @@ object OnlineProviderTest {
         check("config error without network", ConnectionTester.test(cfg(model = "")) { error("must not be called") }.let { !it.ok && it.kind == ProviderErrorKind.CONFIG })
         check("local short-circuits", ConnectionTester.test(ProviderConfig(ProviderType.LOCAL, "", "", "")) { error("no") }.ok)
         check("timeout reported", ConnectionTester.test(cfg()) { OpenAiCompatibleProvider(it, FakeTransport { throw SocketTimeoutException("t") }) }.let { !it.ok && it.kind == ProviderErrorKind.TIMEOUT })
+
+        println("Gemini preset / model ID (regression: preset must never default to \"gemini\"):")
+        val gp = ProviderPresets.all.single { it.type == ProviderType.GEMINI }
+        check("gemini preset exists once and is named Google Gemini", gp.name == "Google Gemini")
+        check("gemini preset model is not the invalid id 'gemini'", !gp.model.equals("gemini", ignoreCase = true) && !gp.model.startsWith("models/"), gp.model)
+        check("gemini preset model is gemini-2.5-flash-lite", gp.model == "gemini-2.5-flash-lite" && gp.model == GeminiModels.DEFAULT, gp.model)
+        check("gemini preset model passes validation", GeminiModels.validationError(gp.model) == null)
+        check("gemini preset base url", gp.baseUrl == "https://generativelanguage.googleapis.com")
+        check("no preset of any type uses a bare 'gemini' model", ProviderPresets.all.none { it.model.equals("gemini", ignoreCase = true) })
+        check("every non-local preset has a non-blank model", ProviderPresets.all.filter { it.type != ProviderType.LOCAL }.all { it.model.isNotBlank() })
+        check("preset -> config round trip is valid", ProviderConfig(gp.type, gp.baseUrl, gp.model, "k").validationError() == null)
+        check("'gemini' rejected as model", GeminiModels.validationError("gemini")!!.contains("not a Gemini model ID"))
+        check("'models/gemini' rejected", GeminiModels.validationError("models/gemini") != null)
+        check("'models/gemini-2.5-flash' normalised + accepted", GeminiModels.normalize("models/gemini-2.5-flash") == "gemini-2.5-flash" && GeminiModels.validationError("models/gemini-2.5-flash") == null)
+        check("custom gemini id preserved (gemini-2.0-flash)", GeminiModels.validationError("gemini-2.0-flash") == null && GeminiModels.normalize(" gemini-2.0-flash ") == "gemini-2.0-flash")
+        check("invalid chars rejected", GeminiModels.validationError("gemini 2.5/flash") != null)
+        check("config with 'gemini' model is invalid before network", cfg(model = "gemini", type = ProviderType.GEMINI).validationError()!!.contains("gemini-2.5-flash-lite"))
+        val gcfg = ProviderConfig(ProviderType.GEMINI, gp.baseUrl, gp.model, "gkey")
+        check("gemini endpoint uses preset model id", GeminiProvider(gcfg).endpoint == "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", GeminiProvider(gcfg).endpoint)
+        check("gemini endpoint strips models/ prefix", GeminiProvider(gcfg.copy(model = "models/gemini-2.5-flash-lite")).endpoint.endsWith("/v1beta/models/gemini-2.5-flash-lite:generateContent"))
+        check("gemini endpoint never contains key", !GeminiProvider(gcfg).endpoint.contains("gkey"))
+        check("gemini 'gemini' config fails with CONFIG kind", (runCatching { GeminiProvider(gcfg.copy(model = "gemini")).complete(req("hi")) }.exceptionOrNull() as? AiProviderException)?.kind == ProviderErrorKind.CONFIG)
+        check("openai-compatible presets untouched by gemini rules", ProviderPresets.all.filter { it.type == ProviderType.OPENAI_COMPATIBLE }.all { ProviderConfig(it.type, it.baseUrl, it.model, "").validationError() == null })
+        check("openai-compatible model named 'gemini' is allowed (not our rule)", cfg(model = "gemini").validationError() == null)
+        check("factory builds GeminiProvider for preset", AiProviderFactory.create(gcfg) is GeminiProvider)
 
         println("Redaction / security:")
         check("exact key removed", !Redactor.redact("Authorization: Bearer $KEY failed", listOf(KEY)).contains(KEY))

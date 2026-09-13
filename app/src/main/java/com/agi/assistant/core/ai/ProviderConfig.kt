@@ -16,12 +16,34 @@ data class ProviderPreset(
     val note: String,
 )
 
+/**
+ * Gemini model-ID rules. The REST path is `models/{id}:generateContent`, so the id must be a
+ * concrete model such as `gemini-2.5-flash-lite`; a bare family name like "gemini" yields HTTP 404.
+ */
+object GeminiModels {
+    const val DEFAULT = "gemini-2.5-flash-lite"
+
+    /** Accepts `models/gemini-…` or `gemini-…` and returns the bare id; other input is returned trimmed. */
+    fun normalize(model: String): String = model.trim().removePrefix("models/").trim()
+
+    /** Null when usable, otherwise a user-facing reason (never mentions secrets). */
+    fun validationError(model: String): String? {
+        val m = normalize(model)
+        if (m.isBlank()) return "Model name is required (e.g. $DEFAULT)."
+        if (m.equals("gemini", ignoreCase = true))
+            return "\"$m\" is not a Gemini model ID. Use a concrete model such as $DEFAULT."
+        if (!Regex("^[A-Za-z0-9][A-Za-z0-9._-]*$").matches(m)) return "Model ID contains invalid characters."
+        if (!m.contains('-')) return "\"$m\" is not a Gemini model ID. Use a concrete model such as $DEFAULT."
+        return null
+    }
+}
+
 object ProviderPresets {
     val all = listOf(
         ProviderPreset("Offline (built-in)", ProviderType.LOCAL, "", "", "Deterministic command parser. Works without internet."),
         ProviderPreset("Groq (free tier)", ProviderType.OPENAI_COMPATIBLE, "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "Fast free tier. Create a key at console.groq.com"),
         ProviderPreset("OpenRouter", ProviderType.OPENAI_COMPATIBLE, "https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct:free", "Many free models. Key from openrouter.ai"),
-        ProviderPreset("Google Gemini", ProviderType.GEMINI, "https://generativelanguage.googleapis.com", "gemini-2.0-flash", "Free tier at aistudio.google.com"),
+        ProviderPreset("Google Gemini", ProviderType.GEMINI, "https://generativelanguage.googleapis.com", GeminiModels.DEFAULT, "Free tier at aistudio.google.com"),
         ProviderPreset("OpenAI", ProviderType.OPENAI_COMPATIBLE, "https://api.openai.com/v1", "gpt-4o-mini", "Paid. Key from platform.openai.com"),
         ProviderPreset("Ollama (local network)", ProviderType.OPENAI_COMPATIBLE, "http://192.168.1.10:11434/v1", "llama3.2", "Run models on your PC; no API key needed."),
     )
@@ -44,7 +66,10 @@ data class ProviderConfig(
         if (scheme != "https" && scheme != "http") return "Base URL must start with https:// (or http:// for a local server)."
         if (url.length <= scheme.length + 3) return "Base URL is incomplete."
         if (model.isBlank()) return "Model name is required."
-        if (type == ProviderType.GEMINI && apiKey.isBlank()) return "API key is required for Gemini."
+        if (type == ProviderType.GEMINI) {
+            GeminiModels.validationError(model)?.let { return it }
+            if (apiKey.isBlank()) return "API key is required for Gemini."
+        }
         return null
     }
 

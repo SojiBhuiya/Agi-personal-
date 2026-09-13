@@ -33,8 +33,8 @@ UpdateManager (app-scoped state holder, observers on main thread)
 
 ### Publishing a release the app will pick up (automated)
 `.github/workflows/release.yml` builds and verifies the signed APK and then **publishes a GitHub
-Release automatically** (step "Publish GitHub Release") when it runs on the default branch, a
-`v*` tag, an `arena/*` branch or via manual dispatch:
+Release automatically** (step "Publish GitHub Release") when triggered by a `v*` tag push or a
+manual run with `publish = true`; ordinary branch pushes only build, test and verify:
 
 * tag/title: `v<versionName>` / `AGI Assistant <versionName>` — both read from the built APK
   (`aapt2 dump badging`), which the workflow has already checked against `app/build.gradle.kts`;
@@ -50,7 +50,8 @@ Release automatically** (step "Publish GitHub Release") when it runs on the defa
   downloads the APK from the release URL and compares its SHA-256 to the built file.
 
 To ship a new version: bump `versionName`/`versionCode` in `app/build.gradle.kts`, add a
-`## <versionName> (versionCode N)` section to `CHANGELOG.md`, push. Installed apps compare
+`## <versionName> (versionCode N)` section to `CHANGELOG.md`, push, wait for CI to be green, then
+`git tag v<versionName> && git push origin v<versionName>` (or run the workflow with publish=true). Installed apps compare
 `SemanticVersion(tag) > installed` (then versionCode) and offer the download from the release asset.
 Workflow artifacts are never used as an update source.
 

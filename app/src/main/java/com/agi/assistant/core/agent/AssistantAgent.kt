@@ -45,13 +45,15 @@ class AssistantAgent(
         val config = settings.providerConfig()
         var provider = AiProviderFactory.create(config)
         val toolCtx = ToolContext(context) { }
+        // One prompt per user turn: every Gemini step reuses the same prefix (cheaper, cache-friendly).
+        val prompt = systemPrompt()
 
         try {
             var steps = 0
             while (steps++ < maxSteps) {
                 onEvent(AgentEvent.Thinking(if (provider.isRemote) "Asking ${provider.displayName}…" else "Planning…"))
                 val response = try {
-                    provider.complete(AiRequest(systemPrompt(), store.window(), tools.specs))
+                    provider.complete(AiRequest(prompt, store.window(), tools.specs))
                 } catch (e: Exception) {
                     // Never log the raw exception: a message could echo request details. Redact first.
                     val reason = ProviderErrors.describe(e, config.secrets)

@@ -5,7 +5,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/** Google Gemini `generateContent` API with function calling. */
+/**
+ * Google Gemini `generateContent` REST API with function calling.
+ *
+ * Gemini 3 attaches an opaque `thoughtSignature` to the Part that carries a `functionCall`; the
+ * same part must be resent with `thought_signature` byte-for-byte on every later turn, otherwise
+ * the API answers HTTP 400 "Function call is missing a thought_signature". [parseResponse] keeps
+ * it on the matching [ToolCall.providerSignature] and [buildBody] puts it back on exactly that
+ * part (parallel calls: only the parts that had one). Never logged.
+ */
 class GeminiProvider(
     private val config: ProviderConfig,
     private val transport: HttpTransport = UrlConnectionTransport,
@@ -18,6 +26,13 @@ class GeminiProvider(
     val endpoint: String get() = config.baseUrl.trimEnd('/') + "/v1beta/models/${GeminiModels.normalize(config.model)}:generateContent"
 
     override suspend fun complete(request: AiRequest): AiResponse {
+        config.validationError()?.let { throw AiProviderException(it, kind = ProviderErrorKind.CONFIG) }
+        val json = HttpJson.post(endpoint, buildBody(request), headers(), config.timeoutMs, config.secrets, transport)
+        return parseResponse(json)
+    }
+
+    /** Builds the generateContent body from the provider-neutral history (pure; JVM-tested). */
+    fun buildBody(request: AiRequest): JSONObject {
         val contents = JSONArray()
         // Gemini requires tool responses to be grouped after the model call.
         request.messages.forEach { m ->
@@ -28,7 +43,10 @@ class GeminiProvider(
                     val parts = JSONArray()
                     if (m.content.isNotBlank()) parts.put(JSONObject().put("text", m.content))
                     m.toolCalls.forEach { c ->
-                        parts.put(JSONObject().put("functionCall", JSONObject().put("name", c.name).put("args", c.argumentsJson())))
+                        val fc = JSONObject().put("functionCall", JSONObject().put("name", c.name).put("args", c.argumentsJson()))
+                        // Echo the signature on exactly the part Gemini returned it with; never invent one.
+                        c.providerSignature?.let { fc.put(THOUGHT_SIGNATURE_WIRE, it) }
+                        parts.put(fc)
                     }
                     if (parts.length() == 0) parts.put(JSONObject().put("text", ""))
                     contents.put(JSONObject().put("role", "model").put("parts", parts))
@@ -49,7 +67,7 @@ class GeminiProvider(
             }
         }
 
-        val body = JSONObject().apply {
+        return JSONObject().apply {
             put("system_instruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", request.systemPrompt))))
             put("contents", contents)
             put("generationConfig", JSONObject().put("temperature", request.temperature))
@@ -65,11 +83,10 @@ class GeminiProvider(
                 })))
             }
         }
+    }
 
-        config.validationError()?.let { throw AiProviderException(it, kind = ProviderErrorKind.CONFIG) }
-        // Key goes in a header (not the query string) so it can never leak through URL logging.
-        val url = endpoint
-        val json = HttpJson.post(url, body, headers(), config.timeoutMs, config.secrets, transport)
+    /** Parses a generateContent response; keeps each functionCall's thought signature on its ToolCall. */
+    fun parseResponse(json: JSONObject): AiResponse {
         val candidate = json.optJSONArray("candidates")?.optJSONObject(0)
             ?: throw AiProviderException("Gemini returned no candidates: ${Redactor.redact(json.toString().take(120), config.secrets)}", kind = ProviderErrorKind.MALFORMED)
         val parts = candidate.optJSONObject("content")?.optJSONArray("parts") ?: JSONArray()
@@ -79,14 +96,30 @@ class GeminiProvider(
             val p = parts.getJSONObject(i)
             p.optString("text").takeIf { it.isNotBlank() }?.let { text.append(it) }
             p.optJSONObject("functionCall")?.let { fc ->
-                calls += ToolCall("call_${UUID.randomUUID()}", fc.getString("name"), fc.optJSONObject("args")?.toMap() ?: emptyMap())
+                val name = fc.optString("name").takeIf { it.isNotBlank() } ?: return@let
+                calls += ToolCall(
+                    "call_${UUID.randomUUID()}", name, fc.optJSONObject("args")?.toMap() ?: emptyMap(),
+                    providerSignature = signatureOf(p),
+                )
             }
         }
+        if (text.isBlank() && calls.isEmpty())
+            throw AiProviderException("Gemini returned an empty message.", kind = ProviderErrorKind.EMPTY)
         return AiResponse(text.toString().ifBlank { null }, calls, id, config.model)
     }
 
+    /** Reads the part-level signature exactly as sent (REST uses camelCase; accept snake_case too). */
+    private fun signatureOf(part: JSONObject): String? =
+        part.optString("thoughtSignature").takeIf { it.isNotEmpty() }
+            ?: part.optString(THOUGHT_SIGNATURE_WIRE).takeIf { it.isNotEmpty() }
+
     /** Only the key header; no user-facing label or other local setting ever goes on the wire. */
     fun headers(): Map<String, String> = mapOf("x-goog-api-key" to config.apiKey)
+
+    companion object {
+        /** Request wire field for the generateContent REST API. */
+        const val THOUGHT_SIGNATURE_WIRE = "thought_signature"
+    }
 
     private fun part(role: String, text: String) =
         JSONObject().put("role", role).put("parts", JSONArray().put(JSONObject().put("text", text)))

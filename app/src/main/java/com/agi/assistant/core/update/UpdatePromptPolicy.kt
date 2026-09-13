@@ -117,7 +117,9 @@ object UpdateMessages {
         val lines = notes.lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
-            .filterNot { Regex("(?i)^(mandatory|versionCode)\\s*[:=]").containsMatchIn(it) }
+            // Machine-readable markers, checksum lines, HTML comments and code fences are not "news".
+            .filterNot { Regex("(?i)^(mandatory|versionCode|versionName|sha-?256)\\s*[:=]").containsMatchIn(it) }
+            .filterNot { Regex("(?i)^[0-9a-f]{64}(\\s|$)").containsMatchIn(it) || it.startsWith("<!--") || it.startsWith("```") }
             .map { line ->
                 line.replace(Regex("^#+\\s*"), "")
                     .replace(Regex("^[-*+]\\s+"), "• ")

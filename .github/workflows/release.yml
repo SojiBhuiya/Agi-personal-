@@ -1,7 +1,11 @@
 name: Release build (signed)
 
-# Builds a signed release APK and verifies it is signed with the persistent AGI Assistant release
-# key. It only uploads a workflow artifact – publishing a GitHub Release is a separate, manual step.
+# Builds a signed release APK, verifies it is signed with the persistent AGI Assistant release key,
+# uploads it as a workflow artifact and – on the default branch or a v* tag – publishes it as a
+# GitHub Release "v<versionName>" with the APK, its .sha256 checksum and generated release notes.
+# GitHub Releases are the official update channel read by the in-app updater
+# (core/update/GitHubReleaseUpdateChecker.kt → /releases/latest). Workflow artifacts are never used
+# for updates. Re-running for an already published version re-uploads the assets (idempotent).
 #
 # Secrets (repository → Settings → Secrets → Actions):
 #   AGI_RELEASE_KEYSTORE_BASE64   base64 of the JKS/PKCS12 keystore (never committed)
@@ -18,7 +22,7 @@ on:
     paths-ignore: ["**.md", "dist/**"]
 
 permissions:
-  contents: read
+  contents: write   # needed only by the "Publish GitHub Release" step (tag + release + assets)
 
 concurrency:
   group: release-build-${{ github.ref }}
@@ -156,6 +160,8 @@ jobs:
           OUT="agi-assistant-$VN-release.apk"; mkdir -p out; cp "$APK" "out/$OUT"
           (cd out && sha256sum "$OUT" > "$OUT.sha256" && cat "$OUT.sha256") | tee -a "$S"
           echo "APK_NAME=$OUT" >> "$GITHUB_ENV"
+          echo "APK_VERSION_NAME=$VN" >> "$GITHUB_ENV"
+          echo "APK_VERSION_CODE=$VC" >> "$GITHUB_ENV"
           echo "✅ signed with the persistent release key; versionName $VN, versionCode $VC" >> "$S"
 
       - name: Upload signed APK artifact
@@ -167,6 +173,53 @@ jobs:
             out/*.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Publish GitHub Release (official update channel)
+        # Only from the repository's default/dev branches or an explicit v* tag, never from PR builds.
+        if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/heads/arena/') || github.event_name == 'workflow_dispatch')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          S="$GITHUB_STEP_SUMMARY"
+          VN="$APK_VERSION_NAME"; VC="$APK_VERSION_CODE"; TAG="v$VN"
+          SHA=$(cut -d' ' -f1 "out/$APK_NAME.sha256")
+          [[ "$SHA" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::checksum file malformed"; exit 1; }
+          # A pushed tag must match the APK version – refuse to publish v0.2.1 assets under a v0.3.0 tag.
+          if [[ "$GITHUB_REF" == refs/tags/* ]] && [ "${GITHUB_REF#refs/tags/}" != "$TAG" ]; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} does not match APK versionName $VN (expected $TAG)"; exit 1
+          fi
+          scripts/release_notes.sh "$VN" "$VC" "$APK_NAME" "$SHA" CHANGELOG.md > out/RELEASE_NOTES.md
+          echo "### GitHub Release $TAG" >> "$S"
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            # Same version rebuilt: refresh assets + notes so the release always matches the newest signed build.
+            echo "Release $TAG exists – updating notes and replacing assets." | tee -a "$S"
+            gh release edit "$TAG" --title "AGI Assistant $VN" --notes-file out/RELEASE_NOTES.md --latest --draft=false --prerelease=false
+            gh release upload "$TAG" "out/$APK_NAME" "out/$APK_NAME.sha256" --clobber
+          else
+            echo "Creating release $TAG at $GITHUB_SHA." | tee -a "$S"
+            gh release create "$TAG" "out/$APK_NAME" "out/$APK_NAME.sha256" \
+              --target "$GITHUB_SHA" --title "AGI Assistant $VN" --notes-file out/RELEASE_NOTES.md --latest
+          fi
+          # Verify what the app will see: /releases/latest must be this tag with both assets.
+          sleep 5
+          LATEST=$(gh api "repos/$GH_REPO/releases/latest")
+          LT=$(echo "$LATEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+          ASSETS=$(echo "$LATEST" | python3 -c 'import json,sys; print("\n".join(a["name"]+" "+a["state"]+" "+str(a["size"]) for a in json.load(sys.stdin)["assets"]))')
+          BODY_OK=$(echo "$LATEST" | python3 -c 'import json,sys; b=json.load(sys.stdin)["body"]; print("yes" if "versionCode: '"$VC"'" in b and "sha256: '"$SHA"'" in b else "no")')
+          { echo "latest tag: $LT"; echo "assets:"; echo "$ASSETS"; echo "notes markers present: $BODY_OK"; } | tee -a "$S"
+          [ "$LT" = "$TAG" ] || { echo "::error::/releases/latest is $LT, expected $TAG"; exit 1; }
+          echo "$ASSETS" | grep -q "^$APK_NAME uploaded " || { echo "::error::APK asset missing from release"; exit 1; }
+          echo "$ASSETS" | grep -q "^$APK_NAME.sha256 uploaded " || { echo "::error::checksum asset missing from release"; exit 1; }
+          [ "$BODY_OK" = "yes" ] || { echo "::error::release notes lack versionCode/sha256 markers"; exit 1; }
+          # Download the published APK the way the app does and compare the digest.
+          curl -fsSL -o /tmp/published.apk "https://github.com/$GH_REPO/releases/download/$TAG/$APK_NAME"
+          PUB=$(sha256sum /tmp/published.apk | cut -d' ' -f1)
+          [ "$PUB" = "$SHA" ] || { echo "::error::published APK sha256 $PUB != built $SHA"; exit 1; }
+          echo "::notice title=GitHub Release::$TAG published – $APK_NAME ($PUB) + $APK_NAME.sha256"
+          echo "✅ published $TAG; downloaded asset digest matches" >> "$S"
 
       - name: Upload verification diagnostics
         if: always()

@@ -114,3 +114,22 @@ VolumeTool (DeviceTools.kt) → VolumeController → AndroidVolumeBackend → Au
   the UI. Gemini's key is sent in the `x-goog-api-key` header, not the URL.
 * Settings → Test connection runs `ConnectionTester`, a real request through the same factory/provider classes.
 * JVM tests: `OnlineProviderTest` (fake transport, deterministic) and `ProviderWireTest` (real HTTP against `scripts/mock_ai_server.py`).
+
+## Response path & latency
+
+`MainActivity → AssistantAgent.handle (Dispatchers.IO) → AgentLoop.run → provider.complete → [tools] → …`
+
+* `AgentLoop` (pure Kotlin, `RequestFlowTest`) guarantees: one provider request per step; tools run only when the
+  model returns tool calls; text-only questions = exactly one request; one tool = provider → tool → provider;
+  fallback to `LocalRuleProvider` only when the remote provider throws; never after a successful response.
+* The system prompt is a lazily-built static prefix + the date/time appended last, so the long unchanging part of
+  every request is byte-identical (provider prefix caching).
+* `ConversationStore.window()` shortens tool outputs from *earlier* turns (`HistoryWindow`, 600 chars); the current
+  turn is always sent complete, which keeps Gemini 3 strict same-turn validation (thought signatures) intact.
+  Persistence is asynchronous (single writer thread, atomic rename) — no file I/O on the response path.
+* `UrlConnectionTransport` keeps the HTTPS connection in the keep-alive pool (no `disconnect()` on success), so the
+  second request of a tool turn skips TCP + TLS setup.
+* Gemini 3 models are called with their default sampling (no explicit temperature), per Google's guidance.
+* `TurnTrace` (numbers only, debug log) records provider/tool counts and milliseconds per turn.
+* Follow-up (not in this task): token streaming would need a streaming transport, incremental `AgentEvent`s and a
+  partial-message chat row; the current architecture consumes whole turns.

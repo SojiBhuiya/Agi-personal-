@@ -77,7 +77,7 @@ val jvmTestClasspath by lazy {
 // Self-contained suites (each exits non-zero on failure). ProviderWireTest needs the mock AI
 // server from scripts/mock_ai_server.py and is run by providerWireTest below.
 val selfContainedSuites = listOf(
-    "LocalRuleProviderTest", "OnlineProviderTest", "GeminiSignatureTest", "SimpleSetupTest", "VolumeControlTest", "AgentLoopTest", "UpdateCheckerTest", "ReleasePublishingTest", "UpdateUiPolicyTest",
+    "LocalRuleProviderTest", "OnlineProviderTest", "RequestFlowTest", "GeminiSignatureTest", "SimpleSetupTest", "VolumeControlTest", "AgentLoopTest", "UpdateCheckerTest", "ReleasePublishingTest", "UpdateUiPolicyTest",
     "ApkDownloaderTest", "InstallFlowTest", "AutoCheckTest",
 )
 val suiteTasks = selfContainedSuites.map { suite ->

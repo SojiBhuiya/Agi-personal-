@@ -17,7 +17,12 @@ interface HttpTransport {
     fun post(url: String, body: String, headers: Map<String, String>, timeoutMs: Int): HttpResponse
 }
 
-/** HttpURLConnection-based transport (no third-party HTTP stack). */
+/**
+ * HttpURLConnection-based transport (no third-party HTTP stack). The response stream is read to
+ * the end and closed but the connection is NOT `disconnect()`ed on success: on Android that keeps
+ * the TLS socket in the keep-alive pool, so the second request of a tool turn (and the next user
+ * turn) skips the TCP+TLS handshake.
+ */
 object UrlConnectionTransport : HttpTransport {
     override fun post(url: String, body: String, headers: Map<String, String>, timeoutMs: Int): HttpResponse {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -35,8 +40,9 @@ object UrlConnectionTransport : HttpTransport {
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.let { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).use(BufferedReader::readText) }.orEmpty()
             return HttpResponse(code, text)
-        } finally {
-            conn.disconnect()
+        } catch (e: Exception) {
+            conn.disconnect() // broken exchange: do not return this socket to the pool
+            throw e
         }
     }
 }

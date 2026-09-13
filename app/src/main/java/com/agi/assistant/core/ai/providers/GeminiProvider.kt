@@ -25,6 +25,9 @@ class GeminiProvider(
     /** `{baseUrl}/v1beta/models/{model}:generateContent` with the model id normalised (no `models/` prefix). */
     val endpoint: String get() = config.baseUrl.trimEnd('/') + "/v1beta/models/${GeminiModels.normalize(config.model)}:generateContent"
 
+    /** True for gemini-3* model ids (thinking models with their own tuned defaults). */
+    val isGemini3: Boolean get() = GeminiModels.normalize(config.model).lowercase().startsWith("gemini-3")
+
     override suspend fun complete(request: AiRequest): AiResponse {
         config.validationError()?.let { throw AiProviderException(it, kind = ProviderErrorKind.CONFIG) }
         val json = HttpJson.post(endpoint, buildBody(request), headers(), config.timeoutMs, config.secrets, transport)
@@ -70,7 +73,9 @@ class GeminiProvider(
         return JSONObject().apply {
             put("system_instruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", request.systemPrompt))))
             put("contents", contents)
-            put("generationConfig", JSONObject().put("temperature", request.temperature))
+            // Gemini 3 docs: leave temperature at the model default (1.0); explicit low values can cause
+            // looping/degraded output. Older Gemini models keep the request temperature.
+            if (!isGemini3) put("generationConfig", JSONObject().put("temperature", request.temperature))
             if (request.tools.isNotEmpty()) {
                 put("tools", JSONArray().put(JSONObject().put("function_declarations", JSONArray().apply {
                     request.tools.forEach { t ->

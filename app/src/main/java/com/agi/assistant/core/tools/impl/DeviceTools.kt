@@ -17,44 +17,61 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * Android binding of the volume feature. All semantics live in [VolumeController] / [VolumeMath]
+ * (JVM-tested); this class only adapts [AudioManager] and the DND permission rules.
+ */
 class VolumeTool : Tool {
     override val category = "Device"
     override val spec = ToolSpec(
         "volume",
-        "Change the media/ring volume: up, down, set to a level (0-100), mute, unmute or max.",
+        "Control volume. set = absolute percent (level 0-100); up/down = one percentage point, or 'delta' " +
+            "percentage points; adjust = signed delta; mute, unmute, max, get (read current).",
         listOf(
-            ToolParam("action", ParamType.STRING, "up, down, set, mute, unmute, max", enumValues = listOf("up", "down", "set", "mute", "unmute", "max")),
-            ToolParam("level", ParamType.INTEGER, "Percent 0-100 when action=set", required = false),
-            ToolParam("stream", ParamType.STRING, "media (default), ring, alarm, call", required = false, enumValues = listOf("media", "ring", "alarm", "call")),
+            ToolParam("action", ParamType.STRING, "set, up, down, adjust, mute, unmute, max, get", enumValues = listOf("set", "up", "down", "adjust", "mute", "unmute", "max", "get")),
+            ToolParam("level", ParamType.INTEGER, "Target percent 0-100 when action=set (absolute, not relative)", required = false),
+            ToolParam("delta", ParamType.INTEGER, "Percentage points to move for up/down/adjust (default 1)", required = false),
+            ToolParam("stream", ParamType.STRING, "media (default), ring, alarm, call, notification", required = false, enumValues = listOf("media", "ring", "alarm", "call", "notification")),
         ),
     )
 
     override suspend fun execute(args: Map<String, Any?>, ctx: ToolContext): ToolResult {
         val am = ctx.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val stream = when (args.str("stream", "media")) { "ring" -> AudioManager.STREAM_RING; "alarm" -> AudioManager.STREAM_ALARM; "call" -> AudioManager.STREAM_VOICE_CALL; else -> AudioManager.STREAM_MUSIC }
-        val max = am.getStreamMaxVolume(stream)
         val nm = ctx.context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        try {
-            when (args.str("action", "up")) {
-                "up" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-                "down" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-                "max" -> am.setStreamVolume(stream, max, AudioManager.FLAG_SHOW_UI)
-                "mute" -> {
-                    if (stream == AudioManager.STREAM_RING && !nm.isNotificationPolicyAccessGranted)
-                        return ToolResult.permission(PermissionNeed(PermissionNeed.Kind.DND_ACCESS, "Do Not Disturb access to mute the ringer"))
-                    am.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, AudioManager.FLAG_SHOW_UI)
-                }
-                "unmute" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_SHOW_UI)
-                "set" -> {
-                    val pct = args.int("level", 50).coerceIn(0, 100)
-                    am.setStreamVolume(stream, Math.round(max * pct / 100f), AudioManager.FLAG_SHOW_UI)
-                }
-            }
+        val cmd = VolumeController.fromToolArgs(args)
+        val streamId = AndroidVolumeBackend.streamId(cmd.stream)
+        // Ringer/notification changes while DND is on need policy access; ask instead of crashing.
+        if ((streamId == AudioManager.STREAM_RING || streamId == AudioManager.STREAM_NOTIFICATION) &&
+            cmd.action == VolumeCommand.Action.MUTE && !nm.isNotificationPolicyAccessGranted)
+            return ToolResult.permission(PermissionNeed(PermissionNeed.Kind.DND_ACCESS, "Do Not Disturb access to mute the ringer"))
+        return try {
+            val out = VolumeController(AndroidVolumeBackend(am)).apply(cmd)
+            ToolResult.ok(out.message, out.spoken)
         } catch (e: SecurityException) {
-            return ToolResult.permission(PermissionNeed(PermissionNeed.Kind.DND_ACCESS, "Do Not Disturb access is required to change this volume"))
+            ToolResult.permission(PermissionNeed(PermissionNeed.Kind.DND_ACCESS, "Do Not Disturb access is required to change this volume"))
         }
-        val now = am.getStreamVolume(stream)
-        return ToolResult.ok("Volume is now ${(now * 100f / max).toInt()}%.", "Volume ${(now * 100f / max).toInt()} percent")
+    }
+}
+
+/** [VolumeBackend] over the real [AudioManager]; the only place that touches stream indices on device. */
+class AndroidVolumeBackend(private val am: AudioManager) : VolumeBackend {
+    override fun maxIndex(stream: String) = am.getStreamMaxVolume(streamId(stream))
+    override fun currentIndex(stream: String) = am.getStreamVolume(streamId(stream))
+    override fun setIndex(stream: String, index: Int) {
+        val id = streamId(stream)
+        val target = index.coerceIn(0, am.getStreamMaxVolume(id))
+        if (target > 0 && am.isStreamMute(id)) am.adjustStreamVolume(id, AudioManager.ADJUST_UNMUTE, 0)
+        am.setStreamVolume(id, target, AudioManager.FLAG_SHOW_UI)
+    }
+    override fun setMuted(stream: String, muted: Boolean) =
+        am.adjustStreamVolume(streamId(stream), if (muted) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_SHOW_UI)
+    override fun isMuted(stream: String) = am.isStreamMute(streamId(stream))
+
+    companion object {
+        fun streamId(stream: String) = when (stream) {
+            "ring" -> AudioManager.STREAM_RING; "alarm" -> AudioManager.STREAM_ALARM; "call" -> AudioManager.STREAM_VOICE_CALL
+            "notification" -> AudioManager.STREAM_NOTIFICATION; else -> AudioManager.STREAM_MUSIC
+        }
     }
 }
 

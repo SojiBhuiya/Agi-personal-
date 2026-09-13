@@ -97,21 +97,8 @@ class LocalRuleProvider : AiProvider {
             }
         }
 
-        // Volume
-        if (lower.contains("volume") || lower.startsWith("mute") || lower.startsWith("unmute") || lower.contains("louder") || lower.contains("quieter")) {
-            val action = when {
-                lower.contains("unmute") -> "unmute"
-                lower.contains("mute") || lower.contains("silent") -> "mute"
-                lower.contains("up") || lower.contains("increase") || lower.contains("louder") || lower.contains("raise") || lower.contains("higher") -> "up"
-                lower.contains("down") || lower.contains("decrease") || lower.contains("quieter") || lower.contains("lower") || lower.contains("reduce") -> "down"
-                lower.contains("max") || lower.contains("full") -> "max"
-                else -> "up"
-            }
-            val level = Regex("(\\d{1,3}) ?%|to (\\d{1,3})").find(lower)?.let { it.groupValues[1].ifEmpty { it.groupValues[2] } }
-            val args = mutableMapOf<String, Any?>("action" to if (level != null) "set" else action)
-            level?.let { args["level"] = it.toInt() }
-            return call("volume", args)
-        }
+        // Volume – English + Bangla, Bengali numerals, absolute vs relative (see core/tools/VolumeLogic.kt)
+        com.agi.assistant.core.tools.VolumeCommand.parse(step)?.let { return call("volume", it.toToolArgs()) }
 
         // Brightness
         if (lower.contains("brightness") || lower.contains("screen brighter") || lower.contains("screen darker")) {

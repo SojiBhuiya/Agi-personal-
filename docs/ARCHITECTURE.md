@@ -81,3 +81,19 @@ have no UI or framework-DI dependencies.
 * Confirmation dialogs for sensitive tools (direct SMS send, calls).
 * Room-backed conversation history with per-thread context.
 * Jetpack Compose UI, Hilt DI, instrumentation tests on an emulator/device.
+
+## Volume
+
+Single implementation, no duplicates:
+
+`user text → LocalRuleProvider.parseStep → VolumeCommand.parse (core/tools/VolumeLogic.kt) → tool call "volume" →
+VolumeTool (DeviceTools.kt) → VolumeController → AndroidVolumeBackend → AudioManager.setStreamVolume → read back → ToolResult`
+
+* **Absolute**: any bare number (`volume 50`, `Volume 60 করো`, `ভলিউম ৬০`) is a target percent, clamped 0–100.
+  `index = round(pct / 100 × getStreamMaxVolume)`; the response reports `round(actualIndex × 100 / max)` read back from the device.
+* **Relative**: `up`/`down`/`বাড়াও`/`কমাও` = ±1 percentage point; `up 1%`, `ভলিউম ১০ বাড়াও`, `down by 5` = ±N points
+  (`action=adjust, delta=N`). On devices whose native step is coarser than the requested delta the index moves by one
+  step in the requested direction so the command always has an effect; bounds are 0 and max. No hard-coded increments.
+* Bengali numerals ০–৯ are normalised by `BanglaDigits.toAscii` before parsing.
+* `mute`, `unmute`, `max`, `get` and the `ring/alarm/call/notification` streams are preserved.
+* JVM tests: `VolumeControlTest` (parser EN+BN, `VolumeMath`, controller against a fake backend).

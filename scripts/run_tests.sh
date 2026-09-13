@@ -9,12 +9,13 @@ OUT="$ROOT/app/build-offline/test-classes"; rm -rf "$OUT"; mkdir -p "$OUT"
 "$TOOLCHAIN/kotlinc/bin/kotlinc" -jvm-target 1.8 -no-reflect \
   -cp "$TOOLCHAIN/android.jar:$KLIB/kotlinx-coroutines-core-jvm.jar" -d "$OUT" \
   "$ROOT/app/src/main/java/com/agi/assistant/core/ai" "$ROOT/app/src/main/java/com/agi/assistant/core/tools/ToolSpec.kt" \
-  "$ROOT/app/src/main/java/com/agi/assistant/core/tools/Tool.kt" "$ROOT/app/src/main/java/com/agi/assistant/core/tools/ToolResult.kt" \
+  "$ROOT/app/src/main/java/com/agi/assistant/core/tools/Tool.kt" "$ROOT/app/src/main/java/com/agi/assistant/core/tools/ToolResult.kt" "$ROOT/app/src/main/java/com/agi/assistant/core/tools/VolumeLogic.kt" \
   "$ROOT/app/src/main/java/com/agi/assistant/core/update" \
   "$ROOT/app/src/test/java" 2>&1 | grep -v '^warning:' || true
 # org.json is a real implementation on the JVM (android.jar only has stubs).
 CP="$OUT:$KLIB/kotlin-stdlib.jar:$KLIB/kotlinx-coroutines-core-jvm.jar:$TOOLCHAIN/json.jar"
 echo "== LocalRuleProviderTest"; java -cp "$CP" com.agi.assistant.LocalRuleProviderTest
+echo "== VolumeControlTest"; java -cp "$CP" com.agi.assistant.VolumeControlTest
 echo "== AgentLoopTest"; java -cp "$CP" com.agi.assistant.AgentLoopTest
 echo "== UpdateCheckerTest"; java -cp "$CP" com.agi.assistant.UpdateCheckerTest
 echo "== UpdateUiPolicyTest"; java -cp "$CP" com.agi.assistant.UpdateUiPolicyTest

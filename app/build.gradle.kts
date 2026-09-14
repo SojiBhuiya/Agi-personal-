@@ -11,8 +11,8 @@ android {
         applicationId = "com.agi.assistant"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
     }
 
     // Release signing is configured ONLY from the environment (CI decodes the keystore secret to a

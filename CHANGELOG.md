@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 (versionCode 3) – 2026-09-15
+- Production update-channel validation release: contains the current application build and exists
+  primarily to validate the real in-app APK update flow (Settings › Check for updates › Update ›
+  Android installer) from 0.2.0 (build 2) to 0.2.1 (build 3).
+- Includes the in-app updater hardening and intent-aware tool routing already merged on this branch;
+  no other functional changes.
+
 ## 0.2.0 (versionCode 2) – 2026-09-12
 - GitHub Release update checker (SemVer + versionCode comparison, asset selection, HTTPS only)
 - Non-intrusive update UI: dialog with What's New, Later/snooze, mandatory releases, Settings › Updates card

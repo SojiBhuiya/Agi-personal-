@@ -62,7 +62,9 @@ class UpdateDialog(
         d.setCancelable(!info.isMandatory)
         d.setCanceledOnTouchOutside(false)
         d.setOnCancelListener { if (manager.state is UpdateState.UpdateAvailable) policy.postpone(info) }
-        d.setOnDismissListener { manager.removeObserver(observer); if (dialog === d) dialog = null }
+        d.setOnDismissListener { manager.removeObserver(observer); if (manager.onReadyToInstall === autoInstall) manager.onReadyToInstall = null; if (dialog === d) dialog = null }
+        // Verified download → open the Android installer right away (the INSTALL button stays as fallback).
+        manager.onReadyToInstall = autoInstall
 
         policy.markShown(info)
         dialog = d
@@ -180,6 +182,10 @@ class UpdateDialog(
 
     /** Hands the verified APK to the system package installer (user confirms there; never silent). */
     private fun onInstall(state: UpdateState.ReadyToInstall) = installer.install(state)
+
+    private val autoInstall: (UpdateState.ReadyToInstall) -> Unit = { ready ->
+        if (!activity.isFinishing && !activity.isDestroyed) installer.install(ready)
+    }
 
     private fun openRelease(info: UpdateInfo) {
         val url = info.htmlUrl.takeIf { it.startsWith("https://") } ?: info.apkDownloadUrl

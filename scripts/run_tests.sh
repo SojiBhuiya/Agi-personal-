@@ -26,6 +26,7 @@ echo "== ReleasePublishingTest"; (cd "$ROOT" && java -cp "$CP" com.agi.assistant
 echo "== UpdateCheckerTest"; java -cp "$CP" com.agi.assistant.UpdateCheckerTest
 echo "== UpdateUiPolicyTest"; java -cp "$CP" com.agi.assistant.UpdateUiPolicyTest
 echo "== ApkDownloaderTest"; java -cp "$CP" com.agi.assistant.ApkDownloaderTest
+echo "== InAppUpdateFlowTest"; (cd "$ROOT" && java -cp "$CP" com.agi.assistant.InAppUpdateFlowTest)
 echo "== InstallFlowTest"; java -cp "$CP" com.agi.assistant.InstallFlowTest
 echo "== AutoCheckTest"; java -cp "$CP" com.agi.assistant.AutoCheckTest
 echo "== ProviderWireTest (mock OpenAI/Gemini server)"

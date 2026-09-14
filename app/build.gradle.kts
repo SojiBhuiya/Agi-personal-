@@ -78,7 +78,7 @@ val jvmTestClasspath by lazy {
 // server from scripts/mock_ai_server.py and is run by providerWireTest below.
 val selfContainedSuites = listOf(
     "LocalRuleProviderTest", "OnlineProviderTest", "IntentRoutingTest", "RequestFlowTest", "GeminiSignatureTest", "SimpleSetupTest", "VolumeControlTest", "AgentLoopTest", "UpdateCheckerTest", "ReleasePublishingTest", "UpdateUiPolicyTest",
-    "ApkDownloaderTest", "InstallFlowTest", "AutoCheckTest",
+    "ApkDownloaderTest", "InAppUpdateFlowTest", "InstallFlowTest", "AutoCheckTest",
 )
 val suiteTasks = selfContainedSuites.map { suite ->
     tasks.register<JavaExec>("run$suite") {

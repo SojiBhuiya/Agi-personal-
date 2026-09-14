@@ -96,8 +96,9 @@ object ApkDownloaderTest {
     private fun localOpen(url: URL): HttpURLConnection =
         (URL("http://127.0.0.1:${server.address.port}${url.path}").openConnection() as HttpURLConnection)
 
-    private fun downloader(dir: File, open: (URL) -> HttpURLConnection = ::localOpen, free: (File) -> Long = { 10L shl 30 }) =
-        ApkDownloader(dir, Dispatchers.IO, connectTimeoutMs = 3000, readTimeoutMs = 3000, open = open, freeSpace = free)
+    /** Transport-level tests run with the lenient checksum mode; the production strict default is covered by InAppUpdateFlowTest. */
+    private fun downloader(dir: File, open: (URL) -> HttpURLConnection = ::localOpen, free: (File) -> Long = { 10L shl 30 }, strict: Boolean = false) =
+        ApkDownloader(dir, Dispatchers.IO, connectTimeoutMs = 3000, readTimeoutMs = 3000, open = open, freeSpace = free, requireChecksum = strict)
 
     private fun tmpDir() = kotlin.io.path.createTempDirectory("apkdl").toFile()
 
@@ -139,7 +140,9 @@ object ApkDownloaderTest {
             check("file exists, non-empty, exact size", r.file.isFile && r.file.length() == apk.size.toLong())
             check("file content matches", r.file.readBytes().contentEquals(apk))
             check("sha256 computed", r.sha256 == apkSha)
-            check("unverified when no checksum published", !r.verified)
+            check("lenient mode: unverified when no checksum published", !r.verified)
+            val strict = downloader(tmpDir(), strict = true).download(info(size = apk.size.toLong()))
+            check("strict (production) mode: no checksum -> CHECKSUM_UNAVAILABLE, nothing staged", strict is DownloadResult.Failure && strict.reason == DownloadError.CHECKSUM_UNAVAILABLE, strict)
             check("saved inside app-controlled directory", r.file.parentFile == dir && r.file.name.endsWith(".apk"))
             check("no .part left behind", dir.listFiles()!!.none { it.name.endsWith(".part") })
             check("progress reported with total", progress.isNotEmpty() && progress.all { it.second == apk.size.toLong() } && progress.last().first == apk.size.toLong())
@@ -169,7 +172,9 @@ object ApkDownloaderTest {
             val r3 = downloader(tmpDir()).download(info(checksumUrl = "https://github.com$base" + "SHA256SUMS"))
             check("wrong sum in SHA256SUMS blocks install", r3 is DownloadResult.Failure && r3.reason == DownloadError.CHECKSUM_MISMATCH, r3)
             val r4 = downloader(tmpDir()).download(info(checksumUrl = "https://github.com$base" + "missing.sha256"))
-            check("unreachable checksum asset -> download still succeeds, unverified", r4 is DownloadResult.Success && !r4.verified, r4)
+            check("lenient: unreachable checksum asset -> unverified", r4 is DownloadResult.Success && !r4.verified, r4)
+            val r5 = downloader(tmpDir(), strict = true).download(info(checksumUrl = "https://github.com$base" + "missing.sha256"))
+            check("strict: unreachable checksum asset -> CHECKSUM_UNAVAILABLE (never installs unverified)", r5 is DownloadResult.Failure && r5.reason == DownloadError.CHECKSUM_UNAVAILABLE, r5)
         }
         println("Parser: checksum discovery")
         run {

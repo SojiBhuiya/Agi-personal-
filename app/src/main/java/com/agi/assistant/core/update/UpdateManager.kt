@@ -35,6 +35,13 @@ class UpdateManager(
     @Volatile var stagedInfo: UpdateInfo? = null
         private set
 
+    /**
+     * Fires once when a download the user started (this session) has been verified and staged, so the
+     * UI can open the Android installer immediately instead of waiting for a second tap. The manager
+     * itself never installs anything; the listener is the foreground Activity's ApkInstaller.
+     */
+    @Volatile var onReadyToInstall: ((UpdateState.ReadyToInstall) -> Unit)? = null
+
     fun addObserver(o: Observer) { observers += o; o.onStateChanged(state) }
     fun removeObserver(o: Observer) { observers -= o }
 
@@ -99,7 +106,11 @@ class UpdateManager(
                 else if (state is UpdateState.Downloading) setState(s)
             }
             when (result) {
-                is DownloadResult.Success -> setState(UpdateState.ReadyToInstall(info, result.file, result.sha256, result.verified))
+                is DownloadResult.Success -> {
+                    val ready = UpdateState.ReadyToInstall(info, result.file, result.sha256, result.verified)
+                    setState(ready)
+                    if (reuse == null) onReadyToInstall?.invoke(ready)   // fresh download → hand straight to the installer
+                }
                 is DownloadResult.Failure -> setState(UpdateState.DownloadFailed(info, result.reason, result.message, result.cause))
             }
         }.also { downloadJob = it }

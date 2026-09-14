@@ -51,8 +51,8 @@ object GitHubReleaseParser {
             ?: throw ParseException("Tag '$tag' is not a semantic version", UpdateError.INVALID_VERSION)
 
         val assets = json.optJSONArray("assets")
-        val apk = selectApkAsset(assets?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it) } } ?: emptyList())
-            ?: throw ParseException("Release $tag has no .apk asset", UpdateError.NO_APK_ASSET)
+        val apk = selectApkAsset(assets?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it) } } ?: emptyList(), version.toString())
+            ?: throw ParseException("Release $tag has no installable release .apk asset", UpdateError.NO_APK_ASSET)
 
         val url = apk.optString("browser_download_url").trim()
         if (!url.startsWith("https://", ignoreCase = true))
@@ -85,15 +85,19 @@ object GitHubReleaseParser {
      * 1. name ends with `.apk` (case-insensitive) and the asset is uploaded;
      * 2. prefer universal builds over ABI splits, release over debug, then the largest.
      */
-    fun selectApkAsset(assets: List<JSONObject>): JSONObject? {
+    fun selectApkAsset(assets: List<JSONObject>, versionName: String? = null): JSONObject? {
         val apks = assets.filter { a ->
             val name = a.optString("name").lowercase()
             val type = a.optString("content_type").lowercase()
             val state = a.optString("state", "uploaded")
             (name.endsWith(".apk") || type == "application/vnd.android.package-archive") &&
-                !name.endsWith(".apk.sha256") && !name.endsWith(".apks") && state == "uploaded"
+                !name.endsWith(".apk.sha256") && !name.endsWith(".apks") && state == "uploaded" &&
+                // Debug-signed builds can never update the release-signed app: wrong file name → rejected.
+                !name.contains("debug")
         }
         if (apks.isEmpty()) return null
+        // The workflow's canonical name (agi-assistant-<version>-release.apk) always wins when present.
+        versionName?.let { v -> apks.firstOrNull { it.optString("name").equals(UpdatePolicy.expectedApkName(v), true) }?.let { return it } }
         return apks.sortedWith(
             compareByDescending<JSONObject> { score(it.optString("name").lowercase()) }
                 .thenByDescending { it.optLong("size", 0L) }

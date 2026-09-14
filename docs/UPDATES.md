@@ -185,3 +185,47 @@ Background download via WorkManager-equivalent, delta updates, changelog history
    `versionCode: N` and `sha256: <hex>` markers (the checker reads both from the release body).
 5. Commit `release: prepare AGI Assistant <v>`, tag `v<v>`, create the GitHub Release with the APK,
    the `.sha256` file and the notes as body. The tag **must** be `v<versionName>`.
+
+## Complete in-app update flow (production)
+
+`Settings → Updates → Check for updates → Update → Android installer → Install`. The user never
+leaves the app to find a file and never needs to obtain an APK by hand.
+
+Source of truth: `GET https://api.github.com/repos/SojiBhuiya/Agi-personal-/releases/latest`
+(GitHub Releases only – never workflow artifacts or branch builds). From it the app resolves tag,
+versionName, `versionCode: N` (notes), What's new, the APK asset, the `<apk>.sha256` asset and the
+HTTPS download URL. Nothing is version-specific: `v0.2.1`, `v0.2.2`, `v0.3.0` … all work as long as the
+workflow keeps publishing `agi-assistant-<versionName>-release.apk` + `.sha256` with the notes markers.
+
+Decision rules (`core/update/UpdatePolicy.kt`):
+* **versionCode is authoritative** – when the release publishes one, `release.versionCode > installed`
+  is the only test; a same-versionCode rebuild is never an update and a lower one is never offered
+  (no downgrades). Releases without a versionCode fall back to semantic versionName comparison.
+* Asset selection prefers the canonical `agi-assistant-<version>-release.apk`; `*debug*.apk` is never
+  selected (a release with only a debug/wrong-named APK reports "no Android package").
+
+Download (`ApkDownloader`, strict by default): HTTPS only, streamed into `<name>.apk.part` with
+progress, resume via `Range`, free-space check, HTTP 403/404/5xx and network errors mapped to
+user-facing messages. **A release must publish a SHA-256** (`sha256:` in notes or the `.sha256`/
+`SHA256SUMS` asset); if none can be read the download is refused with `CHECKSUM_UNAVAILABLE` –
+an unverified APK is never staged. Only after size + ZIP magic + SHA-256 pass is `.part` renamed to
+the final `.apk` (atomic promotion); mismatches delete the file.
+
+Install (`ui/ApkInstaller`, `InstallPolicy.preflight`): the file must be verified, parse as a package
+with `packageName == com.agi.assistant`, have `versionCode > installed`, and – when both can be read –
+share a signing certificate with the installed app (SHA-256 fingerprints via `GET_SIGNING_CERTIFICATES`;
+the release key is `5F:25:0D:82:…:8E:8C`). Then `ACTION_INSTALL_PACKAGE` +
+`application/vnd.android.package-archive` is launched with a `content://` URI from
+`AssistantFileProvider` (`FLAG_GRANT_READ_URI_PERMISSION`, never `file://`). A verified download
+opens the installer automatically; **Install update** in Settings/dialog is the fallback. If
+"Install unknown apps" is not allowed, the app explains it and opens
+`ACTION_MANAGE_UNKNOWN_APP_SOURCES` for `com.agi.assistant`. Installation is always confirmed by the
+user in the system UI – there is no silent install.
+
+Shipping a new version (process, unchanged): bump `versionCode`/`versionName` in
+`app/build.gradle.kts` (versionCode **must** increase), add a `## <versionName>` CHANGELOG section,
+push, then tag `v<versionName>` (or run the release workflow with publish=true). The workflow
+refuses to publish a tag that does not match the APK version, and verifies the published assets.
+
+Requires physical-device verification: the system installer UI, the unknown-sources prompt and the
+actual in-place upgrade (settings retained) cannot be exercised on the JVM or in CI.

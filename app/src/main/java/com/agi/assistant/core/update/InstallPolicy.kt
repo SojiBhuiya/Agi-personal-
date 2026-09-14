@@ -10,7 +10,11 @@ import java.io.File
  */
 object InstallPolicy {
     /** What the platform could tell us about the staged APK (null fields = unknown). */
-    data class ApkFacts(val packageName: String?, val versionCode: Long?, val versionName: String?, val parsed: Boolean)
+    data class ApkFacts(
+        val packageName: String?, val versionCode: Long?, val versionName: String?, val parsed: Boolean,
+        /** SHA-256 fingerprints (upper-case, colon separated) of the APK's signing certificates; null = platform could not read them. */
+        val signerSha256: List<String>? = null,
+    )
 
     sealed class Preflight {
         object Ok : Preflight()
@@ -31,9 +35,15 @@ object InstallPolicy {
         installedPackage: String,
         installedVersionCode: Long,
         canInstallUnknownApps: Boolean,
+        /** Was the file's SHA-256 checked against the published checksum? Unverified files are never installed. */
+        verified: Boolean = true,
+        /** SHA-256 fingerprints of the *installed* app's signing certificates (null = unknown, skip the comparison). */
+        installedSignerSha256: List<String>? = null,
     ): Preflight {
         if (!file.isFile || file.length() <= 0L)
             return Preflight.Blocked(InstallError.FILE_MISSING, "The downloaded update file is missing. Please download it again.", discardFile = true)
+        if (!verified)
+            return Preflight.Blocked(InstallError.UNVERIFIED, "This update could not be verified against the published checksum and will not be installed.", discardFile = true)
         if (apk != null) {
             if (!apk.parsed || apk.packageName == null)
                 return Preflight.Blocked(InstallError.INVALID_APK, "The downloaded file is not a valid Android package. Please download it again.", discardFile = true)
@@ -42,6 +52,12 @@ object InstallPolicy {
             val code = apk.versionCode
             if (code != null && code <= installedVersionCode)
                 return Preflight.Blocked(InstallError.NOT_NEWER, "This package (build $code) is not newer than the installed build $installedVersionCode, so Android would reject it.", discardFile = true)
+            // Same signing key as the installed app? Android would refuse the update anyway; we say so up front
+            // (only when both sides are known – never block a legitimate update on missing information).
+            val apkSigners = apk.signerSha256?.map { it.uppercase() }
+            val ours = installedSignerSha256?.map { it.uppercase() }
+            if (!apkSigners.isNullOrEmpty() && !ours.isNullOrEmpty() && apkSigners.none { it in ours })
+                return Preflight.Blocked(InstallError.SIGNATURE_MISMATCH, "This update is signed with a different key than the installed app, so Android would refuse to install it over the current version.", discardFile = true)
         } else {
             // Platform could not parse the APK – fall back to release metadata when it has a versionCode.
             val code = info.versionCode

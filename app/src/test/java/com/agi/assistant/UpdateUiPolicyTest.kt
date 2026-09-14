@@ -65,7 +65,7 @@ object UpdateUiPolicyTest {
         check("network error is friendly", UpdateMessages.statusLine(UpdateState.Error(UpdateError.NETWORK, "UnknownHostException: api.github.com"), "0.1.0") == "Unable to check for updates. Please try again later.")
         check("malformed error is friendly", UpdateMessages.statusLine(UpdateState.Error(UpdateError.MALFORMED_RESPONSE, "x"), "0.1.0") == UpdateMessages.ERROR)
         check("no releases yet reads as up to date", UpdateMessages.statusLine(UpdateState.Error(UpdateError.HTTP, "No releases have been published yet."), "0.1.0").startsWith("You’re using the latest version."))
-        check("update available line has both versions", UpdateMessages.statusLine(UpdateState.UpdateAvailable(v2), "0.1.0") == "New Update Available: 0.2.0 (you have 0.1.0)")
+        check("update available line has both versions", UpdateMessages.statusLine(UpdateState.UpdateAvailable(v2), "0.1.0") == "New version available: 0.2.0")
         check("mandatory flagged in status", UpdateMessages.statusLine(UpdateState.UpdateAvailable(must), "0.1.0").endsWith("• required"))
 
         val notes = UpdateMessages.whatsNew("## What's New\n- Fixed **volume** controls\n* Improved `voice` commands\n\nmandatory: true\nversionCode: 3\n- Bug fixes [mandatory]")

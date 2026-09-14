@@ -50,14 +50,7 @@ class GitHubReleaseUpdateChecker(
         }
 
         val installed = SemanticVersion.parse(installedVersionName)
-        val newer = when {
-            installed == null -> false // unknown installed version: never claim an update
-            release.version > installed -> true
-            release.version < installed -> false
-            // Same versionName: fall back to versionCode when the release publishes one.
-            release.versionCode != null && installedVersionCode > 0 -> release.versionCode > installedVersionCode
-            else -> false
-        }
+        val newer = UpdatePolicy.isNewer(release.version, release.versionCode, installed, installedVersionCode)
 
         return UpdateCheckResult.Success(
             UpdateInfo(

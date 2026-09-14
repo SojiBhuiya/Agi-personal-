@@ -40,6 +40,7 @@ class ApkInstaller(private val activity: Activity, private val manager: UpdateMa
         val facts = inspect(state.file)
         val pre = InstallPolicy.preflight(
             state.file, state.info, facts, activity.packageName, installed.versionCode, canInstallUnknownApps(),
+            verified = state.verified, installedSignerSha256 = installedSigners(),
         )
         when (pre) {
             is InstallPolicy.Preflight.Blocked -> {
@@ -150,7 +151,7 @@ class ApkInstaller(private val activity: Activity, private val manager: UpdateMa
         }
     }
 
-    /** Parses the APK with PackageManager so package name / versionCode are checked before launching. */
+    /** Parses the APK with PackageManager so package name / versionCode / signer are checked before launching. */
     private fun inspect(file: File): InstallPolicy.ApkFacts? = runCatching {
         val pm = activity.packageManager
         @Suppress("DEPRECATION")
@@ -160,9 +161,42 @@ class ApkInstaller(private val activity: Activity, private val manager: UpdateMa
         else {
             @Suppress("DEPRECATION")
             val code = if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else pi.versionCode.toLong()
-            InstallPolicy.ApkFacts(pi.packageName, code, pi.versionName, parsed = true)
+            InstallPolicy.ApkFacts(pi.packageName, code, pi.versionName, parsed = true, signerSha256 = archiveSigners(file))
         }
     }.getOrNull()
+
+    /** SHA-256 fingerprints of the archive's signing certificates (v2/v3 via GET_SIGNING_CERTIFICATES on API 28+). */
+    private fun archiveSigners(file: File): List<String>? = runCatching {
+        val pm = activity.packageManager
+        @Suppress("DEPRECATION")
+        val pi = if (Build.VERSION.SDK_INT >= 28) pm.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES)
+        else pm.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNATURES)
+        SignerFingerprints.of(pi)
+    }.getOrNull()
+
+    /** Fingerprints of the currently installed app (the permanent release key on production installs). */
+    private fun installedSigners(): List<String>? = runCatching {
+        val pm = activity.packageManager
+        @Suppress("DEPRECATION")
+        val pi = if (Build.VERSION.SDK_INT >= 28) pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        else pm.getPackageInfo(activity.packageName, PackageManager.GET_SIGNATURES)
+        SignerFingerprints.of(pi)
+    }.getOrNull()
+
+    /** Certificate fingerprint helper shared by archive + installed lookups. */
+    object SignerFingerprints {
+        @Suppress("DEPRECATION")
+        fun of(pi: android.content.pm.PackageInfo?): List<String>? {
+            pi ?: return null
+            val sigs: Array<android.content.pm.Signature>? = if (Build.VERSION.SDK_INT >= 28) {
+                val si = pi.signingInfo ?: return null
+                if (si.hasMultipleSigners()) si.apkContentsSigners else si.signingCertificateHistory
+            } else pi.signatures
+            if (sigs.isNullOrEmpty()) return null
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            return sigs.map { sig -> md.digest(sig.toByteArray()).joinToString(":") { "%02X".format(it) } }
+        }
+    }
 
     companion object {
         const val REQ_INSTALL = 0x1A57

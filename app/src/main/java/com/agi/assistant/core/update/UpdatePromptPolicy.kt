@@ -98,13 +98,17 @@ object UpdateMessages {
         UpdateState.Idle -> "Updates are fetched from GitHub Releases."
         UpdateState.Checking -> CHECKING
         is UpdateState.UpToDate -> UP_TO_DATE + " (${state.installedVersion})"
-        is UpdateState.UpdateAvailable -> "$TITLE: ${state.info.versionName} (you have $installedVersion)" +
-            if (state.info.isMandatory) " • required" else ""
+        is UpdateState.UpdateAvailable -> "New version available: ${state.info.versionName}" +
+            (state.info.versionCode?.let { " (build $it)" } ?: "") + (if (state.info.isMandatory) " • required" else "")
         is UpdateState.Downloading -> DOWNLOADING + (if (state.percent >= 0) " ${state.percent}%" else "")
-        is UpdateState.ReadyToInstall -> "$DOWNLOADED: ${state.info.versionName}" + if (state.verified) " (verified)" else ""
+        is UpdateState.ReadyToInstall -> "$DOWNLOADED: ${state.info.versionName}" + if (state.verified) " (verified)" else " (unverified – will not be installed)"
         is UpdateState.DownloadFailed -> "$DOWNLOAD_FAILED: ${state.message}"
         is UpdateState.InstallerLaunched -> "$INSTALLER_LAUNCHED ${state.info.versionName}. Confirm the prompt; the app restarts when done."
-        is UpdateState.InstallationError -> if (state.reason == InstallError.PERMISSION_REQUIRED) "$INSTALL_PERMISSION: ${state.message}" else "$INSTALL_FAILED: ${state.message}"
+        is UpdateState.InstallationError -> when (state.reason) {
+            InstallError.PERMISSION_REQUIRED -> "$INSTALL_PERMISSION: ${state.message}"
+            InstallError.UNVERIFIED -> "Update not installed: ${state.message}"
+            else -> "$INSTALL_FAILED: ${state.message}"
+        }
         is UpdateState.Error -> when (state.reason) {
             UpdateError.HTTP -> if (state.message.startsWith("No releases")) UP_TO_DATE + " No releases published yet." else ERROR
             UpdateError.NO_APK_ASSET -> "The latest release has no Android package yet. Please try again later."

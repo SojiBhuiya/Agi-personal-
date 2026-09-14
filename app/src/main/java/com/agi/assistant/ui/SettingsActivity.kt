@@ -167,14 +167,19 @@ class SettingsActivity : Activity() {
         if (state is UpdateState.UpdateAvailable) {
             val i = state.info
             val notes = UpdateMessages.whatsNew(i.releaseNotes, 6)
-            if (notes.isNotBlank()) { updateNotes.text = "What’s New:\n$notes"; updateNotes.visibility = View.VISIBLE }
+            if (notes.isNotBlank()) { updateNotes.text = "What's new:\n$notes"; updateNotes.visibility = View.VISIBLE }
             btnViewRelease.visibility = View.VISIBLE
             btnViewRelease.text = "Update"
-            btnViewRelease.setOnClickListener { updateDialog.show(i, installed) }
+            // One tap: download → verify → Android installer (the dialog shows progress and is the fallback UI).
+            btnViewRelease.setOnClickListener { updateDialog.show(i, installed); app.updateManager.startDownload(i) }
         }
         when (state) {
             is UpdateState.Downloading -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "View progress"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
-            is UpdateState.ReadyToInstall -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Install"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
+            is UpdateState.ReadyToInstall -> {
+                btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Install update"
+                // Fallback when the installer did not open automatically: launch it directly from Settings.
+                btnViewRelease.setOnClickListener { updateDialog.installer.install(state) }
+            }
             is UpdateState.DownloadFailed -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Retry"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
             is UpdateState.InstallerLaunched -> { btnViewRelease.visibility = View.VISIBLE; btnViewRelease.text = "Install again"; btnViewRelease.setOnClickListener { updateDialog.show(state.info, installed) } }
             is UpdateState.InstallationError -> {

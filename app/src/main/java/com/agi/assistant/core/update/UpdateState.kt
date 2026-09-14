@@ -51,6 +51,8 @@ enum class InstallError {
     USER_CANCELLED,
     /** Installer reported INSTALL_FAILED_UPDATE_INCOMPATIBLE / inconsistent certificates (different signing key). */
     SIGNATURE_MISMATCH,
+    /** The staged file was never checksum-verified; policy refuses to launch the installer for it. */
+    UNVERIFIED,
     /** Installer reported a conflicting package/provider/permission. */
     PACKAGE_CONFLICT,
     /** APK requires a newer Android or an unsupported ABI. */
@@ -62,7 +64,10 @@ enum class InstallError {
 }
 
 enum class DownloadError {
-    NETWORK, HTTP, TIMEOUT, INTERRUPTED, INSUFFICIENT_STORAGE, INVALID_RESPONSE, CHECKSUM_MISMATCH, CANCELLED, STORAGE_IO, UNKNOWN
+    NETWORK, HTTP, TIMEOUT, INTERRUPTED, INSUFFICIENT_STORAGE, INVALID_RESPONSE, CHECKSUM_MISMATCH,
+    /** The release publishes no readable SHA-256; policy refuses to stage an unverifiable APK. */
+    CHECKSUM_UNAVAILABLE,
+    CANCELLED, STORAGE_IO, UNKNOWN
 }
 
 enum class UpdateError {

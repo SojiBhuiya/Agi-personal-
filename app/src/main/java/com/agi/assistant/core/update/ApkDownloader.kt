@@ -46,6 +46,13 @@ class ApkDownloader(
         (url.openConnection() as HttpsURLConnection).apply { instanceFollowRedirects = true }
     },
     private val freeSpace: (File) -> Long = { it.usableSpace },
+    /**
+     * Checksum policy. `true` (production default): a release must publish a SHA-256 – inline in the
+     * notes or as `<apk>.sha256` / `SHA256SUMS` – and a download without one is refused
+     * (`CHECKSUM_UNAVAILABLE`), so an unverified APK is never handed to the installer.
+     * `false` only for repositories that never publish checksums; the result is then flagged unverified.
+     */
+    private val requireChecksum: Boolean = true,
 ) {
     fun interface ProgressListener { fun onProgress(bytesDownloaded: Long, totalBytes: Long) }
 
@@ -102,8 +109,15 @@ class ApkDownloader(
         val target = targetFile(info)
         target.delete() // never hand out a stale file under the final name while we are downloading
 
-        // Expected sum: inline, else fetched from the checksum asset (failure to fetch => unverified, not fatal).
+        // Expected sum: inline in the notes, else fetched from the checksum asset.
         val expectedSha = info.apkSha256 ?: info.checksumAssetUrl?.let { fetchChecksum(it, info.apkAssetName) }
+        if (expectedSha == null && requireChecksum) {
+            return@withContext DownloadResult.Failure(
+                DownloadError.CHECKSUM_UNAVAILABLE,
+                if (info.checksumAssetUrl != null) "The release's checksum file could not be read, so the update cannot be verified. Please try again later."
+                else "This release does not publish a SHA-256 checksum, so the update cannot be verified and will not be installed.",
+            )
+        }
 
         var attempt = 0
         var lastFailure: DownloadResult.Failure? = null

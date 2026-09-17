@@ -89,8 +89,8 @@ class MainActivity : Activity(), VoiceInput.Listener {
         // Restore conversation context.
         app.conversation.all.forEach { m ->
             when (m.role) {
-                Role.USER -> adapter.add(ChatItem.user(m.content))
-                Role.ASSISTANT -> if (m.content.isNotBlank()) adapter.add(ChatItem.assistant(m.content))
+                Role.USER -> adapter.add(ChatItem.user(m.content, m.timestamp))
+                Role.ASSISTANT -> if (m.content.isNotBlank()) adapter.add(ChatItem.assistant(m.content, m.timestamp, m.latencyMs))
                 Role.TOOL -> adapter.add(ChatItem.tool(m.toolName ?: "tool", m.content, !m.content.startsWith("Permission required") && !m.content.contains("failed", true) && !m.content.startsWith("No ") && !m.content.startsWith("Couldn't")))
                 else -> {}
             }
@@ -259,13 +259,17 @@ class MainActivity : Activity(), VoiceInput.Listener {
         scrollToBottom()
 
         job = scope.launch {
+            // Last reply/error bubble of this turn; the measured duration is attached to it on Done.
+            var last: ChatItem? = null
             app.agent.handle(text) { event ->
-                withContext(MainDispatcher) { render(event, thinking) }
+                withContext(MainDispatcher) { last = render(event, thinking, last) }
             }
         }
     }
 
-    private fun render(event: AgentEvent, thinking: ChatItem) {
+    /** Renders one event; returns the bubble that should carry the turn's latency indicator (if any). */
+    private fun render(event: AgentEvent, thinking: ChatItem, last: ChatItem?): ChatItem? {
+        var final = last
         when (event) {
             is AgentEvent.Thinking -> { thinking.text = event.detail; adapter.notifyDataSetChanged() }
             is AgentEvent.ToolStarted -> {
@@ -276,7 +280,8 @@ class MainActivity : Activity(), VoiceInput.Listener {
                 adapter.insertBefore(thinking, ChatItem.tool(event.name, event.display, event.result.success))
             }
             is AgentEvent.Reply -> {
-                adapter.insertBefore(thinking, ChatItem.assistant(event.text))
+                final = ChatItem.assistant(event.text)
+                adapter.insertBefore(thinking, final)
                 if (event.text.isNotBlank()) Speaker.speak(this, event.text)
             }
             is AgentEvent.NeedsPermission -> {
@@ -284,10 +289,15 @@ class MainActivity : Activity(), VoiceInput.Listener {
                 showBanner(event.need.description) { resolvePending() }
                 findViewById<Button>(R.id.bannerAction).text = "Grant"
             }
-            is AgentEvent.Error -> adapter.insertBefore(thinking, ChatItem.error(event.message))
-            AgentEvent.Done -> adapter.remove(thinking)
+            is AgentEvent.Error -> { final = ChatItem.error(event.message); adapter.insertBefore(thinking, final) }
+            is AgentEvent.Done -> {
+                // Measured in AgentLoop with System.nanoTime() (tools + fallback included); shown on the final bubble only.
+                if (event.elapsedMs >= 0) last?.latencyMs = event.elapsedMs
+                adapter.remove(thinking)
+            }
         }
         scrollToBottom()
+        return final
     }
 
     private fun scrollToBottom() {

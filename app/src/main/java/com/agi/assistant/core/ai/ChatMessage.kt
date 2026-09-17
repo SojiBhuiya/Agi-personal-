@@ -35,11 +35,14 @@ data class ChatMessage(
     /** For TOOL messages: the tool name. */
     val toolName: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
+    /** Measured request duration for the final assistant reply of a turn; null for older/other messages. */
+    val latencyMs: Long? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("role", role.name)
         put("content", content)
         put("timestamp", timestamp)
+        latencyMs?.let { put("latencyMs", it) }
         toolCallId?.let { put("toolCallId", it) }
         toolName?.let { put("toolName", it) }
         if (toolCalls.isNotEmpty()) {
@@ -76,6 +79,7 @@ data class ChatMessage(
                 toolCallId = o.optString("toolCallId").ifEmpty { null },
                 toolName = o.optString("toolName").ifEmpty { null },
                 timestamp = o.optLong("timestamp", System.currentTimeMillis()),
+                latencyMs = if (o.has("latencyMs") && !o.isNull("latencyMs")) o.optLong("latencyMs") else null,
             )
         }
     }

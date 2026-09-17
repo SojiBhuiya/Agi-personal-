@@ -14,7 +14,8 @@ sealed class AgentEvent {
     data class Reply(val text: String) : AgentEvent()
     data class NeedsPermission(val need: com.agi.assistant.core.tools.PermissionNeed) : AgentEvent()
     data class Error(val message: String) : AgentEvent()
-    object Done : AgentEvent()
+    /** Turn finished. [elapsedMs] = monotonic wall time from the start of the request to the final reply/error (tools + fallback included). */
+    data class Done(val elapsedMs: Long = -1) : AgentEvent()
 }
 
 /** Where the loop reads/writes conversation history (ConversationStore on device, a list in tests). */
@@ -37,8 +38,10 @@ data class TurnTrace(
     var steps: Int = 0,
     /** UI tool calls refused because the request was informational (see IntentRouter). */
     var blockedCalls: Int = 0,
+    /** Total measured request time (monotonic), set when the turn ends. */
+    var elapsedMs: Long = -1,
 ) {
-    override fun toString() = "steps=$steps provider=$providerCalls(${providerMs}ms) fallback=$fallbackCalls tools=$toolCalls(${toolMs}ms) blocked=$blockedCalls fellBack=$fellBack"
+    override fun toString() = "steps=$steps provider=$providerCalls(${providerMs}ms) fallback=$fallbackCalls tools=$toolCalls(${toolMs}ms) blocked=$blockedCalls fellBack=$fellBack total=${elapsedMs}ms"
 }
 
 /**
@@ -88,6 +91,7 @@ class AgentLoop(
         userText: String? = null,
     ): TurnTrace {
         val trace = TurnTrace()
+        val turnStart = System.nanoTime()
         var active = provider
         val rawTools = toolSpecs.filter { it.rawOutput }.map { it.name }.toSet()
         val route = userText?.let { router.route(it) }
@@ -119,7 +123,7 @@ class AgentLoop(
 
                 if (!response.hasToolCalls) {
                     val text = finalAnswer(response.text, rawOutputsThisTurn)
-                    history.add(ChatMessage(Role.ASSISTANT, text))
+                    history.add(ChatMessage(Role.ASSISTANT, text, latencyMs = Latency.sinceNanos(turnStart)))
                     onEvent(AgentEvent.Reply(text))
                     break
                 }
@@ -158,7 +162,7 @@ class AgentLoop(
                 }
                 if (blocked) {
                     val msg = "I need a permission before I can continue. Please grant it and ask me again."
-                    history.add(ChatMessage(Role.ASSISTANT, msg))
+                    history.add(ChatMessage(Role.ASSISTANT, msg, latencyMs = Latency.sinceNanos(turnStart)))
                     onEvent(AgentEvent.Reply(msg))
                     break
                 }
@@ -167,11 +171,12 @@ class AgentLoop(
             val safe = Redactor.redact(e.message ?: e.javaClass.simpleName, secrets)
             log("agent error: $safe")
             val msg = "Something went wrong: $safe"
-            history.add(ChatMessage(Role.ASSISTANT, msg))
+            history.add(ChatMessage(Role.ASSISTANT, msg, latencyMs = Latency.sinceNanos(turnStart)))
             onEvent(AgentEvent.Error(msg))
         }
+        trace.elapsedMs = Latency.sinceNanos(turnStart)
         log("turn $trace")
-        onEvent(AgentEvent.Done)
+        onEvent(AgentEvent.Done(trace.elapsedMs))
         return trace
     }
 

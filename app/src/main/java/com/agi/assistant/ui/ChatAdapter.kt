@@ -9,18 +9,17 @@ import android.widget.BaseAdapter
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.agi.assistant.R
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.agi.assistant.core.agent.Latency
 
 /** One row in the transcript. */
-class ChatItem(val kind: Kind, var text: String, val meta: String = "", val success: Boolean = true) {
+class ChatItem(val kind: Kind, var text: String, val meta: String = "", val success: Boolean = true, val time: Long = System.currentTimeMillis()) {
     enum class Kind { USER, ASSISTANT, TOOL, STATUS, ERROR }
-    val time: Long = System.currentTimeMillis()
+    /** Measured request duration (ms) shown on the final assistant reply / error of a turn; null = not shown. */
+    var latencyMs: Long? = null
 
     companion object {
-        fun user(t: String) = ChatItem(Kind.USER, t)
-        fun assistant(t: String) = ChatItem(Kind.ASSISTANT, t)
+        fun user(t: String, time: Long = System.currentTimeMillis()) = ChatItem(Kind.USER, t, time = time)
+        fun assistant(t: String, time: Long = System.currentTimeMillis(), latencyMs: Long? = null) = ChatItem(Kind.ASSISTANT, t, time = time).also { it.latencyMs = latencyMs }
         fun tool(name: String, output: String, ok: Boolean) = ChatItem(Kind.TOOL, output, name.replace('_', ' '), ok)
         fun status(t: String) = ChatItem(Kind.STATUS, t)
         fun error(t: String) = ChatItem(Kind.ERROR, t)
@@ -29,7 +28,6 @@ class ChatItem(val kind: Kind, var text: String, val meta: String = "", val succ
 
 class ChatAdapter(private val context: Context) : BaseAdapter() {
     private val items = ArrayList<ChatItem>()
-    private val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     fun add(item: ChatItem) { items += item; notifyDataSetChanged() }
     fun remove(item: ChatItem) { items.remove(item); notifyDataSetChanged() }
@@ -59,12 +57,12 @@ class ChatAdapter(private val context: Context) : BaseAdapter() {
             ChatItem.Kind.USER -> {
                 row.gravity = Gravity.END
                 bubble.setBackgroundResource(R.drawable.bg_bubble_user)
-                meta.text = fmt.format(Date(item.time))
+                meta.text = Latency.clock(item.time)
             }
             ChatItem.Kind.ASSISTANT -> {
                 row.gravity = Gravity.START
                 bubble.setBackgroundResource(R.drawable.bg_bubble_assistant)
-                meta.text = "Assistant • " + fmt.format(Date(item.time))
+                meta.text = "Assistant • " + Latency.clock(item.time) + (item.latencyMs?.let { " • " + Latency.indicator(it) } ?: "")
             }
             ChatItem.Kind.TOOL -> {
                 row.gravity = Gravity.START
@@ -85,7 +83,7 @@ class ChatAdapter(private val context: Context) : BaseAdapter() {
                 bubble.setBackgroundResource(R.drawable.bg_bubble_tool_fail)
                 bubble.textSize = 13f
                 bubble.setTextColor(context.getColor(R.color.warning))
-                meta.text = "Notice"
+                meta.text = item.latencyMs?.let { Latency.failedIndicator(it) } ?: "Notice"
             }
         }
         return view

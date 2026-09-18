@@ -15,6 +15,7 @@ import android.view.View
 import com.agi.assistant.util.MainDispatcher
 import com.agi.assistant.util.mainScope
 import com.agi.assistant.voice.Speaker
+import com.agi.assistant.voice.TranscriptProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,6 +39,7 @@ class SettingsActivity : Activity() {
     private lateinit var testResult: TextView
     private lateinit var swFallback: Switch
     private lateinit var swSpeak: Switch
+    private lateinit var voiceLanguage: Spinner
     private lateinit var updateInstalled: TextView
     private lateinit var updateStatus: TextView
     private lateinit var updateNotes: TextView
@@ -65,6 +67,8 @@ class SettingsActivity : Activity() {
         testResult = findViewById(R.id.testResult)
         swFallback = findViewById(R.id.swFallback)
         swSpeak = findViewById(R.id.swSpeak)
+        voiceLanguage = findViewById(R.id.voiceLanguage)
+        voiceLanguage.adapter = spinnerAdapter(TranscriptProcessor.LANGUAGE_CHOICES.map { it.second })
 
         val presetNames = listOf("Custom…") + ProviderPresets.all.map { it.name }
         preset.adapter = spinnerAdapter(presetNames)
@@ -100,6 +104,7 @@ class SettingsActivity : Activity() {
         advancedToggle.setOnClickListener { showAdvanced(advancedPanel.visibility != View.VISIBLE) }
         swFallback.isChecked = s.fallbackToLocal
         swSpeak.isChecked = s.speakReplies
+        voiceLanguage.setSelection(TranscriptProcessor.LANGUAGE_CHOICES.indexOfFirst { it.first == s.voiceLanguage }.coerceAtLeast(0))
         findViewById<TextView>(R.id.version).text = "AGI Assistant ${packageManager.getPackageInfo(packageName, 0).versionName} • provider-independent AI layer"
 
         preset.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -233,6 +238,7 @@ class SettingsActivity : Activity() {
             providerType = c.type; baseUrl = c.baseUrl; model = c.model; apiKey = c.apiKey
             apiName = this@SettingsActivity.apiName.text.toString()
             fallbackToLocal = swFallback.isChecked; speakReplies = swSpeak.isChecked
+            voiceLanguage = TranscriptProcessor.LANGUAGE_CHOICES.getOrNull(this@SettingsActivity.voiceLanguage.selectedItemPosition)?.first ?: TranscriptProcessor.LANG_AUTO
         }
         Speaker.enabled = swSpeak.isChecked
         Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()

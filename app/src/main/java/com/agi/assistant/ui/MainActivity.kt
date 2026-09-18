@@ -317,13 +317,17 @@ class MainActivity : Activity(), VoiceInput.Listener {
         liveTranscript.text = getString(R.string.listening)
         liveTranscript.visibility = View.VISIBLE
         btnMic.setBackgroundResource(R.drawable.bg_mic_active)
-        v.start()
+        v.start(app.settings.voiceLanguage)
     }
 
     override fun onReady() {}
     override fun onPartial(text: String) { liveTranscript.text = text }
     override fun onLevel(rms: Float) { btnMic.scaleX = 1f + (rms.coerceIn(0f, 10f) / 40f); btnMic.scaleY = btnMic.scaleX }
-    override fun onResult(text: String) { submit(text) }
+    override fun onResult(text: String) {
+        // Only the FINAL recognizer result reaches the assistant; partials are preview only.
+        android.util.Log.d("VoiceInput", "submit to agent: \"${text.take(120)}\" (raw=\"${voice?.lastFinal?.raw?.take(120)}\")")
+        submit(text)
+    }
     override fun onError(message: String) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
     override fun onEnd() {
         liveTranscript.visibility = View.GONE

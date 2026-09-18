@@ -46,6 +46,8 @@
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp" android:layout_marginTop="10dp" android:background="@drawable/bg_card">
             <Switch android:id="@+id/swFallback" android:layout_width="match_parent" android:layout_height="52dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:textColor="@color/text" android:text="Fall back to offline planner if the AI API fails"/>
             <Switch android:id="@+id/swSpeak" android:layout_width="match_parent" android:layout_height="52dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:textColor="@color/text" android:text="Speak replies aloud"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Caption" android:paddingStart="10dp" android:layout_marginTop="6dp" android:text="Voice input language (speech recognition)"/>
+            <Spinner android:id="@+id/voiceLanguage" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_input" android:popupBackground="@color/surface_2"/>
         </LinearLayout>
 
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/Text.Title" android:layout_marginTop="24dp" android:text="Updates"/>

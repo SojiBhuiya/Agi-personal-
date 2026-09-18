@@ -56,6 +56,11 @@ class SecureSettings(context: Context) : UpdatePreferences, ProviderSettingsStor
         get() = prefs.getBoolean(KEY_TTS, true)
         set(v) = prefs.edit().putBoolean(KEY_TTS, v).apply()
 
+    /** Speech-recognition language: "auto" (phone locale), "bn-BD" or "en-US". */
+    var voiceLanguage: String
+        get() = prefs.getString("voice_language", "auto") ?: "auto"
+        set(v) = prefs.edit().putString("voice_language", v).apply()
+
     var confirmSensitiveActions: Boolean
         get() = prefs.getBoolean(KEY_CONFIRM, true)
         set(v) = prefs.edit().putBoolean(KEY_CONFIRM, v).apply()

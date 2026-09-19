@@ -125,7 +125,7 @@ object UpdateCheckerTest {
 
         println("Network failure:")
         r = run(checker(throwing = UnknownHostException("api.github.com")), "0.1.0")
-        check("UnknownHostException -> NETWORK, no throw", r is UpdateCheckResult.Failure && r.reason == UpdateError.NETWORK, r)
+        check("UnknownHostException -> DNS (connectivity), no throw", r is UpdateCheckResult.Failure && r.reason == UpdateError.DNS && r.reason.isConnectivity, r)
         r = run(checker(throwing = IOException("timeout")), "0.1.0")
         check("IOException -> NETWORK", r is UpdateCheckResult.Failure && r.reason == UpdateError.NETWORK && r.message.contains("timeout"), r)
         r = run(checker(throwing = IllegalStateException("boom")), "0.1.0")
@@ -146,7 +146,7 @@ object UpdateCheckerTest {
         check("UpToDate state carries installed version", repo2.toState(runBlocking { repo2.checkForUpdate() }).let { it is UpdateState.UpToDate && it.installedVersion == "0.1.0" })
         val repo3 = UpdateRepository(checker(throwing = IOException("offline")), { InstalledVersion("0.1.0", 1) }, Dispatchers.Unconfined)
         val err = repo3.toState(runBlocking { repo3.checkForUpdate() })
-        check("Error state from network failure", err is UpdateState.Error && err.reason == UpdateError.NETWORK, err)
+        check("Error state from network failure", err is UpdateState.Error && err.reason.isConnectivity, err)
         val repo4 = UpdateRepository(object : UpdateChecker {
             override suspend fun check(installedVersionName: String, installedVersionCode: Long) = throw RuntimeException("checker bug")
         }, { InstalledVersion("0.1.0", 1) }, Dispatchers.Unconfined)

@@ -25,6 +25,7 @@ echo "== OnlineProviderTest"; java -cp "$CP" com.agi.assistant.OnlineProviderTes
 echo "== VolumeControlTest"; java -cp "$CP" com.agi.assistant.VolumeControlTest
 echo "== AgentLoopTest"; java -cp "$CP" com.agi.assistant.AgentLoopTest
 echo "== ReleasePublishingTest"; (cd "$ROOT" && java -cp "$CP" com.agi.assistant.ReleasePublishingTest)
+echo "== UpdateConnectivityTest"; java -cp "$CP" com.agi.assistant.UpdateConnectivityTest
 echo "== UpdateCheckerTest"; java -cp "$CP" com.agi.assistant.UpdateCheckerTest
 echo "== UpdateUiPolicyTest"; java -cp "$CP" com.agi.assistant.UpdateUiPolicyTest
 echo "== ApkDownloaderTest"; java -cp "$CP" com.agi.assistant.ApkDownloaderTest

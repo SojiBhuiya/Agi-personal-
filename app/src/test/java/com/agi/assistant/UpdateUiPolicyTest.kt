@@ -63,7 +63,7 @@ object UpdateUiPolicyTest {
         check("checking text", UpdateMessages.statusLine(UpdateState.Checking, "0.1.0") == "Checking for updates...")
         check("up to date text", UpdateMessages.statusLine(UpdateState.UpToDate("0.1.0", null), "0.1.0").startsWith("You’re using the latest version."))
         check("network error is friendly", UpdateMessages.statusLine(UpdateState.Error(UpdateError.NETWORK, "UnknownHostException: api.github.com"), "0.1.0") == "Unable to check for updates. Please try again later.")
-        check("malformed error is friendly", UpdateMessages.statusLine(UpdateState.Error(UpdateError.MALFORMED_RESPONSE, "x"), "0.1.0") == UpdateMessages.ERROR)
+        check("malformed error is friendly (classified)", UpdateMessages.statusLine(UpdateState.Error(UpdateError.MALFORMED_RESPONSE, "x"), "0.1.0") == UpdateMessages.ERROR_RESPONSE)
         check("no releases yet reads as up to date", UpdateMessages.statusLine(UpdateState.Error(UpdateError.HTTP, "No releases have been published yet."), "0.1.0").startsWith("You’re using the latest version."))
         check("update available line has both versions", UpdateMessages.statusLine(UpdateState.UpdateAvailable(v2), "0.1.0") == "New version available: 0.2.0")
         check("mandatory flagged in status", UpdateMessages.statusLine(UpdateState.UpdateAvailable(must), "0.1.0").endsWith("• required"))

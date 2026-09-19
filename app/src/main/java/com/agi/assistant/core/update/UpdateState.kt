@@ -71,7 +71,15 @@ enum class DownloadError {
 }
 
 enum class UpdateError {
-    /** No connectivity, DNS failure, timeout, TLS problem. */
+    /** Device reports no network with internet capability (nothing was sent). */
+    NO_INTERNET,
+    /** Hostname could not be resolved (UnknownHostException: "No address associated with hostname"). */
+    DNS,
+    /** TLS handshake / certificate problem. Never bypassed: the check simply fails. */
+    TLS,
+    /** Connect or read timed out. */
+    TIMEOUT,
+    /** Other connectivity failure (connection refused/reset, socket closed, generic IOException). */
     NETWORK,
     /** GitHub answered with a non-2xx status (404 = no releases yet, 403 = rate limited). */
     HTTP,
@@ -82,6 +90,10 @@ enum class UpdateError {
     /** Tag could not be parsed as a version. */
     INVALID_VERSION,
     UNKNOWN,
+    ;
+
+    /** True for failures caused by the network path rather than by GitHub's answer. */
+    val isConnectivity: Boolean get() = this == NO_INTERNET || this == DNS || this == TLS || this == TIMEOUT || this == NETWORK
 }
 
 /** Result of a single check, independent of any UI state holder. */

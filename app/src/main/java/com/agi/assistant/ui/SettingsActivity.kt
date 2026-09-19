@@ -132,7 +132,7 @@ class SettingsActivity : Activity() {
         btnCheckUpdate.setOnClickListener {
             manualCheck = true
             app.updatePolicy.resetSession()
-            app.updateManager.checkNow()
+            app.updateManager.checkNow(app.isOnline())
         }
     }
 

@@ -146,7 +146,7 @@ object InAppUpdateFlowTest {
             check("15. HTTP 500 -> HTTP error 'try again later'", e500 is DownloadResult.Failure && e500.reason == DownloadError.HTTP && e500.message.contains("500"), e500)
             check("12-15. nothing installable left behind", dir.listFiles()!!.none { it.name.endsWith(".apk") })
             val c = checker(throwing = UnknownHostException("api.github.com")); val cr = run(c, "0.2.0", 2)
-            check("12b. check: network failure -> NETWORK + generic UI text", cr is UpdateCheckResult.Failure && cr.reason == UpdateError.NETWORK && UpdateMessages.statusLine(UpdateState.Error(cr.reason, cr.message), "0.2.0") == UpdateMessages.ERROR, cr)
+            check("12b. check: network failure -> NETWORK + generic UI text", cr is UpdateCheckResult.Failure && cr.reason == UpdateError.DNS && UpdateMessages.statusLine(UpdateState.Error(cr.reason, cr.message), "0.2.0") == UpdateMessages.ERROR_DNS, cr)
             for (code in listOf(403, 404, 500)) { val x = run(checker(code = code, body = "{}"), "0.2.0", 2); check("13-15b. check: HTTP $code -> safe Failure", x is UpdateCheckResult.Failure && x.reason == UpdateError.HTTP, x) }
         }
 

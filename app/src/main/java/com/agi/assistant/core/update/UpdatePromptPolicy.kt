@@ -80,6 +80,12 @@ object UpdateMessages {
     const val CHECKING = "Checking for updates..."
     const val UP_TO_DATE = "You’re using the latest version."
     const val ERROR = "Unable to check for updates. Please try again later."
+    const val ERROR_OFFLINE = "No internet connection. Connect to Wi‑Fi or mobile data, then check again."
+    const val ERROR_DNS = "Couldn’t find GitHub (DNS). Your network gave no address for api.github.com – check the connection or try another network."
+    const val ERROR_TLS = "Secure connection to GitHub failed. Check the phone’s date & time or try another network."
+    const val ERROR_TIMEOUT = "GitHub took too long to respond. Check your connection and try again."
+    const val ERROR_GITHUB = "GitHub returned an error. Please try again later."
+    const val ERROR_RESPONSE = "GitHub’s release information could not be read. Please try again later."
     const val TITLE = "New Update Available"
     const val DOWNLOADING = "Downloading update..."
     const val DOWNLOADED = "Update downloaded"
@@ -110,8 +116,13 @@ object UpdateMessages {
             else -> "$INSTALL_FAILED: ${state.message}"
         }
         is UpdateState.Error -> when (state.reason) {
-            UpdateError.HTTP -> if (state.message.startsWith("No releases")) UP_TO_DATE + " No releases published yet." else ERROR
+            UpdateError.HTTP -> if (state.message.startsWith("No releases")) UP_TO_DATE + " No releases published yet." else ERROR_GITHUB
             UpdateError.NO_APK_ASSET -> "The latest release has no Android package yet. Please try again later."
+            UpdateError.NO_INTERNET -> ERROR_OFFLINE
+            UpdateError.DNS -> ERROR_DNS
+            UpdateError.TLS -> ERROR_TLS
+            UpdateError.TIMEOUT -> ERROR_TIMEOUT
+            UpdateError.MALFORMED_RESPONSE, UpdateError.INVALID_VERSION -> ERROR_RESPONSE
             else -> ERROR
         }
     }

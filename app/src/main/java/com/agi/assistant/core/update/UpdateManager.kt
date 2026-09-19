@@ -46,7 +46,12 @@ class UpdateManager(
     fun removeObserver(o: Observer) { observers -= o }
 
     /** Runs a check unless one is already in flight or a download is active/staged. */
-    fun checkNow(): Job = check(automatic = false)
+    /**
+     * Manual check. [online] is the ConnectivityManager signal; when false the request is still
+     * attempted (the signal can be wrong under VPNs), but a connectivity failure is reported as
+     * [UpdateError.NO_INTERNET] so the UI says "no internet" instead of a DNS/socket detail.
+     */
+    fun checkNow(online: Boolean = true): Job = check(automatic = false, online = online)
 
     /**
      * Automatic check (app start / foreground). [online] comes from ConnectivityManager. Obeys
@@ -65,7 +70,7 @@ class UpdateManager(
     @Volatile var lastAutoDecision: AutoCheckPolicy.Decision? = null
         private set
 
-    private fun check(automatic: Boolean): Job {
+    private fun check(automatic: Boolean, online: Boolean = true): Job {
         job?.takeIf { it.isActive }?.let { return it }
         if (state is UpdateState.Downloading) return downloadJob!!
         if (state is UpdateState.InstallerLaunched) return job ?: scope.launch {} // don't disturb an install in progress
@@ -75,6 +80,8 @@ class UpdateManager(
             val result = repository.checkForUpdate()
             autoPolicy?.recordResult(result)
             var next = repository.toState(result)
+            if (!online && next is UpdateState.Error && next.reason.isConnectivity)
+                next = UpdateState.Error(UpdateError.NO_INTERNET, "No internet connection. Connect to Wi‑Fi or mobile data and try again. (${next.message})", next.cause)
             if (automatic && result is UpdateCheckResult.Failure) next = if (previous is UpdateState.Checking) UpdateState.Idle else previous
             // Keep a finished download visible if it is still the newest release.
             val staged = stagedInfo
